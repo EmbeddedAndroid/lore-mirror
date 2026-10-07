@@ -14,3 +14,7 @@ issues/
 .deps/
 .runtime/
 config/local.json
+config/full-manifest.json
+.env
+evidence/
+artifacts/

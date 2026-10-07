@@ -14,4 +14,11 @@ dist
 build
 *.mbox
 *.eml
-!tests/fixtures/*.eml
+!tests/fixtures/**/*.eml
+evidence
+artifacts
+.env
+BRIEF.md
+HANDOFF.md
+REPORT.md
+config/full-manifest.json

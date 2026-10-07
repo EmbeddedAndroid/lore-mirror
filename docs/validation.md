@@ -1,5 +1,10 @@
 # Validation status
 
+Container deployment was subsequently verified on the laptop. See
+[../REPORT.md](../REPORT.md) for the Docker build, complete in-image suite,
+real small-list HTTP MCP calls and persistence evidence. The historical
+executor limitations below describe the original v1 validation environment.
+
 Checked 7 October 2026. The approved four-inbox full-history pilot is indexed, and its four-list incremental reconciliation succeeded. The genuine elapsed-time observations are complete. The live hourly daemon has a separate network/runtime limitation described below. This is not a completed full-lore mirror.
 
 ## Passed

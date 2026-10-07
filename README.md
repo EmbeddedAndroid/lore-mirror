@@ -8,7 +8,7 @@ The selected pilot comprises linux-arm-msm, u-boot, devicetree-spec and u-boot-a
 
 The four inboxes are indexed, with 951,304 summed per-inbox Message-ID records after reconciliation (cross-post memberships, not unique messages). Initial Git/basic/shared-index components occupy 17.23 GiB. All 150 native-enabled tests pass, and real HTTP/MCP read and local-issue tests pass. See [measurements and sizing](docs/pilot-measurements.md) and [validation limits](docs/validation.md).
 
-The hourly daemon is implemented, but its first live cycle failed with a managed-proxy CONNECT 403. Its process handle is now unavailable and no running coordinator or scheduled future run is verified. The last successful four-list reconciliation, at 16:00:20 UTC, remains read-safe. Start hourly sync on the chosen host using the commands below; do not assume this workspace is an active persistent service. Docker/Compose execution and LEI runtime are also unverified here.
+The original executor could not keep its hourly daemon running because of a managed-proxy CONNECT 403. Its last successful four-list reconciliation was at 16:00:20 UTC. The laptop deployment is a separate two-small-inbox Compose stack; see [REPORT.md](REPORT.md) for current build, daemon and HTTP MCP verification. LEI runtime remains unverified; both deployments use the direct public-inbox backend.
 
 ## What is included
 
@@ -29,7 +29,7 @@ Start from the delivered source directory. No public repository publication is r
 cd /path/to/lore-mirror
 sudo apt-get update
 sudo apt-get install --no-install-recommends \
-  ca-certificates git curl make gcc libc6-dev perl python3 python3-venv \
+  ca-certificates git curl make gcc g++ libc6-dev perl python3 python3-venv \
   liburi-perl libdbi-perl libdbd-sqlite3-perl libsearch-xapian-perl \
   libemail-address-xs-perl libsocket-msghdr-perl liblinux-inotify2-perl \
   libnet-server-perl libtimedate-perl libinline-c-perl xapian-tools time
@@ -79,30 +79,229 @@ PYTHONPATH=src .venv/bin/python -m lore_mirror sync \
 
 The worker enforces the reserve during synchronization too. Passing the reserve check is not a prediction that the complete mirror fits; configured byte/time budgets and actual pilot measurements still matter. Do not turn a list count or epoch count into a storage estimate.
 
-## Docker/Compose installation
+## Running with Docker Compose
 
-Install Docker Engine and Compose from the [official Docker instructions](https://docs.docker.com/engine/install/) for the host first. The checked-in image uses non-root UID/GID 10001. Query and sync are separate services with separate scratch directories. The query service has a read-only archive mount, an internal-only Docker network, and writable issue/runtime volumes. The published port binds to `127.0.0.1`, even though the process listens on all interfaces inside its container.
+Install Docker Engine or Docker Desktop with Compose v2.20 or newer and Bash.
+No host Python, Perl or compiler is needed. The image pins the Debian base by
+multi-architecture digest, a signed Debian package snapshot, public-inbox commit
+`94b6bbb95cb88a6de59458b47869c74fc0c901ad`, and hash-locked Python wheels.
+Builds check those inputs; byte-for-byte identical image output is not claimed.
+The services run as UID/GID 10001 with read-only root filesystems.
+
+The default mounted `config/container.json` is derived from `config/pilot.json`
+and selects only **devicetree-spec and u-boot-amlogic**, with one Git worker.
+The original four-list pilot remains in `config/pilot.json` for larger hosts.
+The prior [pilot measurements](docs/pilot-measurements.md) measured about
+169 MiB for the two small lists' Git/basic/shared indexes and about 393 MiB
+peak sampled indexing RSS. Allow additional room for the image, build cache,
+temporary work and growth. Keep at least 30% of the data filesystem free.
+The full four-list pilot used 17.23 GiB; the documented starting allocation is
+2 to 4 CPUs, 8 GiB RAM and 64 GiB storage including illustrative reindex room.
+These measurements do not establish full-lore capacity.
+
+### First run
 
 ```sh
 cd /path/to/lore-mirror
-scripts/setup.sh --mode docker
-scripts/verify.sh --docker
+scripts/setup.sh
+# Equivalent: scripts/setup.sh --mode docker
 
-# This is the only setup command that fetches the configured pilot mail.
-scripts/setup.sh --mode docker --skip-install --bootstrap-pilot
-docker compose up -d api
+docker compose ps
 curl --fail http://127.0.0.1:8765/api/health
-
-# Optional ongoing hourly updates; sync is an opt-in Compose profile.
-docker compose --profile sync up -d sync
-docker compose logs --tail=100 api sync
+docker compose logs --tail=100 api sync gateway
 ```
 
-Use `config/container.json` for Compose. Mount paths in that file are container paths (`/data`, `/issues`, `/runtime`), not host paths. Named volumes preserve mail and reports across container replacement. `docker compose down` stops services without deleting named volumes; do not add `--volumes` unless you intend to delete those datasets.
+Setup builds the image, runs the complete offline suite inside it, stops an
+existing sync daemon, runs preflight and one sync/index job, starts API, TCP gateway and
+hourly sync, waits for their healthchecks, and verifies a native search. Rerunning
+setup reconciles the existing archive; it does not discard or re-clone it.
+A failed test, preflight or initial sync stops setup before startup. If updating
+an existing installation, fix the error and rerun setup to resume the daemon.
+Ordinary `docker compose up -d` also starts hourly sync, so inspect the mounted
+selection before running it. Only the sync service mounts `/data` writable;
+bootstrap is a one-shot invocation of that same service. A filesystem lock
+rejects overlapping coordinators. There is no separate index writer.
 
-Build inputs are pinned to public-inbox `94b6bbb95cb88a6de59458b47869c74fc0c901ad`, Debian's official `bookworm-slim` image digest, a timestamped signed Debian package snapshot, and the Python lock. This improves repeatability; it is not a claim of independently verified bit-for-bit reproducible image output. Refresh the base digest, Debian snapshot and Python lock together when applying reviewed security updates. No SBOM or generation rollback system is included in this lean scope.
+The API listens at `http://127.0.0.1:8765`, with Streamable HTTP at `/mcp`.
+The API's internal Docker network has no external route. It reads local mail
+and writes only local issue reports and transient scratch files. A TCP gateway on a separate ingress network publishes the localhost port and
+forwards only to the API, without mail or issue mounts. Docker does not publish
+ports from an internal-only container, so the gateway provides host access while
+the API remains isolated. Sync uses its own upstream network. Services have restart policies, CPU,
+memory and PID limits, and three rotating 10 MB Docker logs. Runtime directories
+are disposable tmpfs mounts; `/data` and `/issues` use separate named volumes.
+Native logs under `/data/logs` rotate before the next job once they reach
+10 MiB, retaining three previous files. A single running job can exceed that
+threshold; the existing storage guard still preserves disk headroom. These
+logs are part of the archive backup.
 
-Docker is not installed in the current build executor. Native execution and tests are the local validation path; the Docker image build, Compose startup and container-level network/mount enforcement must be verified on a Docker host. Do not treat a checked-in Compose file or YAML parse as a successful container run.
+Put persistent settings in `.env` so every Compose command uses them:
+
+```dotenv
+LORE_PORT=8765
+LORE_CONFIG=./config/container.json
+```
+
+`LORE_CONFIG` must name an existing JSON file using container paths (`/data`,
+`/issues`, `/runtime`, `/app`). Missing config files fail instead of becoming
+empty directories. `scripts/setup.sh --config PATH` overrides the config for
+that invocation; set `.env` for subsequent commands. The localhost port binding
+is fixed, while `LORE_PORT` is configurable. Do not publish unauthenticated
+access beyond the host; remote access needs your trusted private proxy.
+
+A Streamable HTTP client configuration example:
+
+```json
+{
+  "mcpServers": {
+    "lore-mirror": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+```
+
+The exact config container key varies by MCP client; use its Streamable HTTP
+transport, not SSE or stdio. Run the checked-in real SDK smoke client through
+the API container's TCP listener:
+
+```sh
+docker compose exec -T api python /app/scripts/smoke-mcp.py
+```
+
+### Adding inboxes and full-manifest selection
+
+Edit the JSON selected by `LORE_CONFIG`, adding entries like those in
+`config/pilot.json`. Each ID must be an erol manifest namespace, with
+`inbox_path` set to `/data/inboxes/ID`. Keep the existing catalog/class metadata
+where known. Then run `scripts/setup.sh` to test, reconcile and recreate the
+services. Removed selections do not delete old Git data. To reduce a dataset,
+create a separate empty volume and keep the old one until recovery is verified.
+
+Full-manifest selection is available as an explicit config-generation command.
+It fetches only the erol manifest and materializes every namespace into a JSON
+selection shared by API and sync. It never clones mail by itself. It is off by
+default and has not been mirrored on this laptop. Run this on a suitably sized
+host, inspect the output and storage requirements, then select it with
+`LORE_CONFIG=./config/full-manifest.json` in `.env` before setup:
+
+```sh
+# Refuse to overwrite an existing selection.
+(set -o noclobber; docker compose run --rm --no-deps -T --entrypoint python sync \
+  /app/scripts/configure-manifest.py --full-manifest > config/full-manifest.json)
+```
+
+Unknown projects are classified `unclassified`; edit their class/address
+metadata if needed. New upstream namespaces require regenerating the selection.
+Only configured inboxes are admitted. No tool discovers or fetches remote mail.
+
+### Use a large host disk
+
+For a bind mount, create a directory owned by 10001:10001. Do not change ownership
+of a disk root or an existing unrelated dataset. Add these settings to `.env`:
+
+```dotenv
+COMPOSE_FILE=compose.yaml:compose.bind.yaml
+LORE_DATA_DIR=/srv/lore-mirror/mail
+```
+
+```sh
+sudo install -d -o 10001 -g 10001 -m 0750 /srv/lore-mirror/mail
+scripts/setup.sh
+```
+
+The override replaces `/data` for both services and keeps the API mount
+read-only. Issue reports remain in their separate named volume. Switching this
+setting does not migrate old data; restore a backup into the new directory
+first if preserving the existing archive. Use a Linux filesystem supporting
+file locks, atomic rename and Unix permissions. On Docker Desktop, ensure the
+host path is shared and the underlying host disk has capacity too.
+
+### Upgrade and manual sync
+
+Keep the selected config and `.env` alongside your backup. Review source and
+pin changes, then run `scripts/setup.sh`; it rebuilds and tests before touching
+the running writer. To run verification independently:
+
+```sh
+scripts/verify.sh --docker
+```
+
+A manual cycle uses the same single writer:
+
+```sh
+docker compose stop sync
+docker compose run --rm --no-deps sync sync --config /config/pilot.json --once
+docker compose up -d --wait sync
+```
+
+An unchanged manifest completes without Git/index work. Changed fingerprints
+update existing epochs incrementally. Index updates briefly block mail reads;
+clients receive `index_updating` and should retry. `docker compose down` preserves
+named volumes, as do image rebuilds. `docker compose down --volumes` deletes them.
+
+### Backup and restore
+
+With the default project name, persistent volumes are `lore-mirror_mail` and
+`lore-mirror_issues`. Compose prefixes them with a different project name when
+using `-p` or `COMPOSE_PROJECT_NAME`. Stop both services to take consistent mail
+and SQLite issue snapshots. Bootstrap/backup/restore all use the sync service
+for any writable mail mount; the backup command itself reads mail only.
+
+```sh
+mkdir -p artifacts/backup
+docker compose stop api sync
+docker compose run --rm --no-deps -T --entrypoint tar sync -C /data -czf - . \
+  > artifacts/backup/mail.tar.gz
+docker compose run --rm --no-deps -T --entrypoint tar api -C /issues -czf - . \
+  > artifacts/backup/issues.tar.gz
+docker compose up -d --wait api sync gateway
+```
+
+Check command exit statuses and keep copies off this disk. Save the config,
+`.env` and image revision with the archives. To restore into **empty** volumes
+(or an empty prepared bind directory), use the matching Compose settings:
+
+```sh
+docker compose stop api sync
+docker compose run --rm --no-deps -T --entrypoint tar sync \
+  -C /data -xzf - < artifacts/backup/mail.tar.gz
+docker compose run --rm --no-deps -T --entrypoint tar api \
+  -C /issues -xzf - < artifacts/backup/issues.tar.gz
+scripts/setup.sh --skip-install
+```
+
+The non-root image creates named volumes with the correct ownership. Do not
+restore on top of a running writer or mix unrelated index generations. Retain
+the old image and volume until the restored search and issue calls pass.
+
+### Troubleshooting
+
+- `docker compose ps` and `docker compose logs --tail=100 api sync gateway` show service
+  health and cycle summaries. Read `/data/sync-state.json` through
+  `docker compose exec -T sync cat /data/sync-state.json` for stage errors, and
+  `/data/logs/` for native command logs.
+- An unhealthy API can mean no initial index. Run setup and check sync errors.
+  HTTP health reports index presence and freshness; use `mail.list_lists` to
+  confirm every selected inbox is indexed. A failed sync healthcheck reports a
+  dead/unlocked coordinator, failed cycle or overdue schedule. Docker does not
+  restart a process solely because its healthcheck fails; the daemon retries
+  upstream failures on its next cycle, and restart policy handles process exit.
+- Low disk preserves the 30% reserve and stops expanding work. Add capacity
+  before retrying. A quiet unchanged cycle refreshes successful-sync freshness.
+- A lock conflict means another sync owns the archive. Stop the daemon before
+  manual sync; never remove lock files to bypass the live writer.
+- An interrupted index can set `unsafe_index`. Rerun setup against the same
+  selection to reconcile it before trusting reads. Preserve existing epochs.
+- Bind mount permission errors require the data directory to be writable by
+  UID/GID 10001. Missing configuration paths must be corrected on the host.
+- If a sandbox cannot write Docker's buildx activity directory, set
+  `BUILDX_CONFIG` to a writable temporary directory. If Docker Desktop's
+  Windows credential helper is unavailable, public pulls can use an empty
+  temporary `DOCKER_CONFIG`; never copy credentials into the repository.
+
+See [REPORT.md](REPORT.md) for this laptop's container and MCP verification.
 
 ## Connect an MCP client
 
@@ -148,7 +347,7 @@ See [the tool reference](docs/tool-reference.md) for arguments, limits, paginati
 
 ## Important limits
 
-This version does not include public deployment/authentication, full-manifest bootstrap, a five-year derived archive, embeddings, an SBOM, immutable-generation rollback, private mailing-list access or administrator outreach. It does not infer a confirmed upstream merge from matching subject/author or review trailers. Series grouping and evidence searches report ambiguity and mirrored-scope limits. Full-corpus capacity and completion time remain unestablished until broader authorized measurements exist.
+This version does not include public deployment/authentication, a verified full-manifest mirror, a five-year derived archive, embeddings, an SBOM, immutable-generation rollback, private mailing-list access or administrator outreach. It does not infer a confirmed upstream merge from matching subject/author or review trailers. Series grouping and evidence searches report ambiguity and mirrored-scope limits. Full-corpus capacity and completion time remain unestablished until broader authorized measurements exist.
 
 Upstream components retain their own licenses. public-inbox source and notices are retained in the container at `/opt/public-inbox`; inspect applicable upstream licensing before redistributing or publicly deploying this bundle.
 

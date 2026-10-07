@@ -10,8 +10,8 @@ if [[ ${1:-} == --docker && $# == 1 ]]; then
   docker info >/dev/null
   docker compose config --quiet
   docker compose build
-  docker compose run --rm --no-deps --env LORE_NATIVE_E2E_REQUIRED=1 \
-    --entrypoint python api -m unittest discover -s tests -v
+  docker compose --profile test run --rm --no-deps --env LORE_NATIVE_E2E_REQUIRED=1 \
+    --entrypoint python test -m unittest discover -s tests -v
   exit 0
 elif [[ $# -gt 0 ]]; then
   echo 'Usage: scripts/verify.sh [--docker]' >&2

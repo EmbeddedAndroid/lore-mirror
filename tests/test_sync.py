@@ -38,7 +38,7 @@ class SyncSafetyTests(unittest.TestCase):
             path = Path(tmp) / 'config.json'
             for options in ({'max_workers': 3}, {'min_free_fraction': .1},
                 {'lists': [{'id': '../escape'}]}):
-                path.write_text(json.dumps({'data_dir': tmp, 'lists': [], **options}))
+                path.write_text(json.dumps({'data_dir': tmp, 'lists': [{'id': 'test'}], **options}))
                 with self.assertRaises(SyncError):
                     prepare_config(path)
 

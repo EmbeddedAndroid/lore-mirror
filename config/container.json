@@ -9,7 +9,7 @@
   "upstream": "https://erol.kernel.org",
   "manifest_url": "https://erol.kernel.org/manifest.js.gz",
   "interval_seconds": 3600,
-  "max_workers": 2,
+  "max_workers": 1,
   "min_free_fraction": 0.3,
   "initial_storage_multiplier": 4,
   "user_agent": "lore-mirror/0.1 (bounded archive mirror; max 2 workers)",
@@ -35,28 +35,6 @@
       ],
       "address": "u-boot-amlogic@groups.io",
       "size_class": "small"
-    },
-    {
-      "id": "linux-arm-msm",
-      "class": "kernel",
-      "inbox_path": "/data/inboxes/linux-arm-msm",
-      "newsgroup": "org.kernel.lore.linux-arm-msm",
-      "aliases": [
-        "linux-arm-msm"
-      ],
-      "address": "linux-arm-msm@vger.kernel.org",
-      "size_class": "large"
-    },
-    {
-      "id": "u-boot",
-      "class": "u-boot",
-      "inbox_path": "/data/inboxes/u-boot",
-      "newsgroup": "org.kernel.lore.u-boot",
-      "aliases": [
-        "u-boot"
-      ],
-      "address": "u-boot@lists.denx.de",
-      "size_class": "large"
     }
   ],
   "limits": {
@@ -85,5 +63,6 @@
       "source_url": "https://git.u-boot-project.org/u-boot/u-boot/-/raw/8d7bc8add17bbc69a58dfe0002eea039dd2dc1bc/MAINTAINERS"
     }
   },
-  "scope_note": "Approved four-list pilot; devicetree and linux-arm-kernel deferred to a larger host."
+  "scope_note": "Small Docker demo: devicetree-spec and u-boot-amlogic only. Edit the mounted configuration to select more inboxes.",
+  "job_memory_limit_bytes": 3221225472
 }

@@ -16,7 +16,7 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources && \
     printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/%s/ bookworm main\n' "$DEBIAN_SNAPSHOT" > /etc/apt/sources.list && \
     printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/%s/ bookworm-security main\n' "$DEBIAN_SNAPSHOT" >> /etc/apt/sources.list && \
     apt-get update && apt-get install --no-install-recommends -y \
-      ca-certificates git curl make gcc libc6-dev perl \
+      ca-certificates git curl make gcc g++ libc6-dev perl socat \
       python3 python3-venv python3-pip \
       liburi-perl libdbi-perl libdbd-sqlite3-perl \
       libsearch-xapian-perl libemail-address-xs-perl libsocket-msghdr-perl \
@@ -48,8 +48,9 @@ RUN groupadd --gid 10001 mirror && useradd --uid 10001 --gid 10001 --home-dir /r
     mkdir -p /data /issues /runtime/run /runtime/config /runtime/data /runtime/cache && \
     chown -R mirror:mirror /data /issues /runtime && chmod 0700 /runtime/run
 USER 10001:10001
+RUN perl -MPublicInbox::LEI -e 1 && python -m pip check
 EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=3).read(4096)"
+  CMD python /app/scripts/healthcheck.py api
 ENTRYPOINT ["python", "-m", "lore_mirror"]
 CMD ["serve", "--config", "/config/pilot.json", "--listen", "0.0.0.0", "--port", "8765"]

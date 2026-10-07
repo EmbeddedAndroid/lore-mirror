@@ -13,7 +13,7 @@ def main():
     parser.add_argument("--runtime-dir", type=Path, default=root / "runtime")
     parser.add_argument("--issue-dir", type=Path, default=root / "issues")
     args = parser.parse_args()
-    cfg = json.loads((root / "config/container.json").read_text())
+    cfg = json.loads((root / "config/pilot.json").read_text())
     data = args.data_dir.expanduser().resolve()
     cfg.update(data_dir=str(data), runtime_dir=str(args.runtime_dir.expanduser().resolve()),
                issue_dir=str(args.issue_dir.expanduser().resolve()), extindex=str(data / "extindex"),

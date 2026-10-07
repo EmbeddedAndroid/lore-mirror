@@ -91,7 +91,7 @@ class SetupBoundaryTests(unittest.TestCase):
             path=Path(root) / "config.json"
             path.write_text(json.dumps({"data_dir":str(Path(root)/"data"),"backend":"public-inbox",
                                         "lists":[{"id":f"inbox-{n}"} for n in range(7)]}))
-            result=subprocess.run([str(script),"--skip-install","--config",str(path),"--bootstrap-pilot"],
+            result=subprocess.run([str(script),"--mode","native","--skip-install","--config",str(path),"--bootstrap-pilot"],
                                   capture_output=True,text=True,timeout=10)
             self.assertNotEqual(result.returncode,0)
             self.assertIn("Refusing bootstrap: explicitly select",result.stdout+result.stderr)
@@ -102,7 +102,7 @@ class SetupBoundaryTests(unittest.TestCase):
             path=Path(root) / "config.json"
             path.write_text(json.dumps({"data_dir":str(Path(root)/"data"),"backend":"public-inbox",
                                         "min_free_fraction":.999999999,"lists":[{"id":"test"}]}))
-            result=subprocess.run([str(script),"--skip-install","--config",str(path),"--bootstrap-pilot"],
+            result=subprocess.run([str(script),"--mode","native","--skip-install","--config",str(path),"--bootstrap-pilot"],
                                   capture_output=True,text=True,timeout=10)
             self.assertNotEqual(result.returncode,0)
             self.assertIn("Refusing bootstrap: less than",result.stdout+result.stderr)

@@ -29,6 +29,7 @@ EPOCH_RE = re.compile(r"^/([a-zA-Z0-9][a-zA-Z0-9_.+-]*)/git/(\d+)\.git$")
 PACK_RE = re.compile(rb"^P (pack-[a-f0-9]{40,64}\.pack)$", re.M)
 MAX_MANIFEST_COMPRESSED = 4 * 1024 * 1024
 MAX_MANIFEST_PLAIN = 32 * 1024 * 1024
+LOG_MAX_BYTES = 10 * 1024 * 1024
 
 
 class SyncError(RuntimeError):
@@ -242,6 +243,13 @@ def run_command(argv, config, log_path, *, env=None):
     memory_limit = config.get("job_memory_limit_bytes", 6 * GIB)
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    # Rotate between jobs so the child keeps a stable output descriptor.
+    if log_path.exists() and log_path.stat().st_size >= LOG_MAX_BYTES:
+        for number in (2, 1):
+            previous = Path(f"{log_path}.{number}")
+            if previous.exists():
+                previous.replace(f"{log_path}.{number + 1}")
+        log_path.replace(f"{log_path}.1")
     error = None
     with log_path.open("ab") as log:
         log.write((json.dumps({"at": utcnow(), "argv": argv}) + "\n").encode())
@@ -323,6 +331,9 @@ def prepare_config(path):
     config.setdefault("max_workers", 2)
     config.setdefault("min_free_fraction", .30)
     config.setdefault("user_agent", "lore-mirror/0.1 (bounded archive mirror)")
+    ids = [item["id"] for item in config.get("lists", [])]
+    if not 1 <= len(ids) <= 1000 or len(ids) != len(set(ids)):
+        raise SyncError("explicitly select 1 to 1000 unique inboxes")
     from urllib.parse import urlparse
     upstream = urlparse(config["upstream"])
     if upstream.scheme != "https" or upstream.hostname not in ALLOWED_HOSTS or upstream.username or upstream.query or upstream.fragment or upstream.path not in ("", "/"):
@@ -494,12 +505,13 @@ def _sync_once_locked(config):
     state.update(status="partial" if errors else "ready", updating=any(r.get("index_dirty") for r in state["lists"].values()), cycle_finished_at=utcnow(),
         extindex_bytes=tree_bytes(config["extindex"]), disk_free_bytes=shutil.disk_usage(root).free,
         pending_lists=errors, next_run_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
-    atomic_json(state_path, state)
     if any(r.get("indexed_at", "") >= state["cycle_started_at"] for r in state["lists"].values()):
         state["generation"] = state.get("generation", 0) + 1
         state["last_indexed_at"] = state["cycle_finished_at"]
+    if state["status"] == "ready" and not state["unsafe_index"]:
         state["last_success"] = state["cycle_finished_at"]
-        atomic_json(state_path, state)
+        state.pop("last_error", None)
+    atomic_json(state_path, state)
     history_path = root / "state" / "observations.json"
     history = json.loads(history_path.read_text()) if history_path.exists() else []
     history.append({"observed_at": state["cycle_finished_at"], "generation": state.get("generation", 0),

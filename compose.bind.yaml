@@ -1,0 +1,16 @@
+services:
+  api:
+    volumes:
+      - type: bind
+        source: ${LORE_DATA_DIR:?Set LORE_DATA_DIR to an existing absolute directory}
+        target: /data
+        read_only: true
+        bind:
+          create_host_path: false
+  sync:
+    volumes:
+      - type: bind
+        source: ${LORE_DATA_DIR:?Set LORE_DATA_DIR to an existing absolute directory}
+        target: /data
+        bind:
+          create_host_path: false
