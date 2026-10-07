@@ -1,0 +1,36 @@
+{
+  "retrieved_at": "2026-10-07",
+  "description": "Exact public raw emails from a real mirrored inbox; fixtures retain author and list headers. Public archival availability is not a copyright-license assertion.",
+  "messages": [
+    {
+      "file": "01.eml",
+      "message_id": "20261005135406.509901-1-sanderson@brivo.com",
+      "blob": "cdd8b069e8e6f9ecc7f84fe24e8623e96d43cc8e",
+      "sha256": "bdca0796aa6fb59a58a98f866360eec82806d87f45e225d2328ba3347a0ce59f",
+      "list_id": "u-boot-amlogic",
+      "source_url": "https://lore.kernel.org/u-boot-amlogic/20261005135406.509901-1-sanderson@brivo.com/",
+      "source_epoch": "https://erol.kernel.org/u-boot-amlogic/git/0.git",
+      "class": "u-boot"
+    },
+    {
+      "file": "02.eml",
+      "message_id": "20261005135406.509901-2-sanderson@brivo.com",
+      "blob": "0691cd43a9ce577ea3e425ac98f7fbb6c620195f",
+      "sha256": "69479d041290737f3b5c5095a1ac56905742d34a1175a42419abd2b8181dfab1",
+      "list_id": "u-boot-amlogic",
+      "source_url": "https://lore.kernel.org/u-boot-amlogic/20261005135406.509901-2-sanderson@brivo.com/",
+      "source_epoch": "https://erol.kernel.org/u-boot-amlogic/git/0.git",
+      "class": "u-boot"
+    },
+    {
+      "file": "03.eml",
+      "message_id": "20261005135406.509901-3-sanderson@brivo.com",
+      "blob": "d54b66a17c9cba921e77455b90237a9c2b69f334",
+      "sha256": "0d81d746ba4a271226795b8d10842263a142be3bccf91ac5f8ef487803a04367",
+      "list_id": "u-boot-amlogic",
+      "source_url": "https://lore.kernel.org/u-boot-amlogic/20261005135406.509901-3-sanderson@brivo.com/",
+      "source_epoch": "https://erol.kernel.org/u-boot-amlogic/git/0.git",
+      "class": "u-boot"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+.git
+.venv
+.deps
+.runtime
+config/local.json
+__pycache__
+*.pyc
+*.egg-info
+.pytest_cache
+data
+runtime
+issues
+dist
+build
+*.mbox
+*.eml
+!tests/fixtures/*.eml

@@ -1,0 +1,56 @@
+name: lore-mirror
+x-image: &image
+  image: lore-mirror:local
+  build:
+    context: .
+  user: "10001:10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  init: true
+  pids_limit: 128
+  tmpfs:
+    - /tmp:rw,nosuid,noexec,size=128m,uid=10001,gid=10001,mode=1770
+
+services:
+  api:
+    <<: *image
+    command: [serve, --config, /config/pilot.json, --listen, "0.0.0.0", --port, "8765"]
+    ports:
+      - "127.0.0.1:${LORE_PORT:-8765}:8765"
+    volumes:
+      - ./config/container.json:/config/pilot.json:ro
+      - mail:/data:ro
+      - issues:/issues:rw
+      - api-runtime:/runtime:rw
+    networks: [query]
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+  sync:
+    <<: *image
+    # Explicit opt-in: ordinary `docker compose up` cannot bootstrap mail.
+    profiles: [sync]
+    command: [sync, --config, /config/pilot.json, --daemon]
+    volumes:
+      - ./config/container.json:/config/pilot.json:ro
+      - mail:/data:rw
+      - issues:/issues:rw
+      - sync-runtime:/runtime:rw
+    networks: [upstream]
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    mem_limit: 4g
+    cpus: 2
+
+networks:
+  # Query container has no routable outbound network. All reads are local.
+  query:
+    internal: true
+  upstream: {}
+volumes:
+  mail: {}
+  issues: {}
+  api-runtime: {}
+  sync-runtime: {}

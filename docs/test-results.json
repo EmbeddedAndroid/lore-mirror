@@ -1,0 +1,20 @@
+{
+  "checked_at_utc": "2026-10-07T16:18:00Z",
+  "command": "LORE_NATIVE_E2E_REQUIRED=1 scripts/verify.sh",
+  "tests": 150,
+  "seconds": 40.769,
+  "skips": 0,
+  "python": "3.12.14",
+  "platform": "Linux",
+  "status": "passed",
+  "native_dependencies_required": true,
+  "network_used_by_tests": false,
+  "docker_runtime": "not_run_no_docker_available",
+  "lei_runtime": "unavailable_AF_UNIX_SOCK_SEQPACKET",
+  "tested_query_backend": "direct_pinned_public_inbox",
+  "notes": [
+    "Real public mail fixtures imported offline into fresh native public-inbox v2/basic plus full external indexes.",
+    "Live pilot completion and HTTP smoke are documented separately.",
+    "Docker entrypoint mock tests are not container build or network-enforcement validation."
+  ]
+}

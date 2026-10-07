@@ -1,0 +1,491 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "captured_at": "2026-10-07T13:29:00.305441+00:00",
+    "source": "Existing immutable two-list local small-readonly-snapshot, direct public-inbox helper; no web queries or refetch.",
+    "snapshot_lists": [
+      "devicetree-spec",
+      "u-boot-amlogic"
+    ],
+    "snapshot_index_generation": "1",
+    "public_inbox_commit": "94b6bbb95cb88a6de59458b47869c74fc0c901ad",
+    "fixture_manifest_sha256": "d2e87cd5d64577495b47d206b465dd637b805959c254ff2ab73d4a37e3cb69d3",
+    "scope": "Searches are explicitly restricted to the three committed fixture Message-IDs. Results are observed native index answers, not fixture-backend answers. Replay builds an independent temporary native inbox and full extindex."
+  },
+  "searches": [
+    {
+      "name": "all_fixture_messages",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\")"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-3-sanderson@brivo.com",
+        "20261005135406.509901-2-sanderson@brivo.com",
+        "20261005135406.509901-1-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "known_message_id",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (mid:\"20261005135406.509901-2-sanderson@brivo.com\")"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-2-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "unknown_message_id",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (mid:\"absent-native-e2e@fixture.invalid\")"
+      },
+      "expected_message_ids": []
+    },
+    {
+      "name": "from",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (f:sanderson@brivo.com)"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-3-sanderson@brivo.com",
+        "20261005135406.509901-2-sanderson@brivo.com",
+        "20261005135406.509901-1-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "subject",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (s:\"Use if instead\")"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-2-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "body",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (b:\"convert ifdefs\")"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-2-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "date",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (d:20261005..20261005)"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-3-sanderson@brivo.com",
+        "20261005135406.509901-2-sanderson@brivo.com",
+        "20261005135406.509901-1-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "empty_date",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (d:20261006..20261006)"
+      },
+      "expected_message_ids": []
+    },
+    {
+      "name": "list_header",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (l:u-boot-amlogic.groups.io)"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-3-sanderson@brivo.com",
+        "20261005135406.509901-2-sanderson@brivo.com",
+        "20261005135406.509901-1-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "diff_path",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (dfn:drivers/net/designware.c)"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-3-sanderson@brivo.com",
+        "20261005135406.509901-2-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "diff_path_specific",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (dfn:drivers/net/dwmac_meson8b.c)"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-3-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "list_scope_u-boot-amlogic",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\")",
+        "lists": [
+          "u-boot-amlogic"
+        ]
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-3-sanderson@brivo.com",
+        "20261005135406.509901-2-sanderson@brivo.com",
+        "20261005135406.509901-1-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "list_scope_devicetree-spec",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\")",
+        "lists": [
+          "devicetree-spec"
+        ]
+      },
+      "expected_message_ids": []
+    },
+    {
+      "name": "patch_id_1",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (patchid:c7a8be86856dc8037f3abbc49fc3a0b633fdc138)"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-2-sanderson@brivo.com"
+      ]
+    },
+    {
+      "name": "patch_id_2",
+      "arguments": {
+        "query": "(mid:\"20261005135406.509901-1-sanderson@brivo.com\" OR mid:\"20261005135406.509901-2-sanderson@brivo.com\" OR mid:\"20261005135406.509901-3-sanderson@brivo.com\") AND (patchid:122dda0712e064021d60a4bcc54e94b176bc078b)"
+      },
+      "expected_message_ids": [
+        "20261005135406.509901-3-sanderson@brivo.com"
+      ]
+    }
+  ],
+  "messages": [
+    {
+      "message": {
+        "message_id": "20261005135406.509901-1-sanderson@brivo.com",
+        "variant": "bdca0796aa6fb59a58a98f866360eec82806d87f45e225d2328ba3347a0ce59f",
+        "subject": "[PATCH v2 0/2] net: designware: Fix MDIO bus getting bound multiple times",
+        "from": "Sean Anderson <sanderson@brivo.com>",
+        "from_email": "sanderson@brivo.com",
+        "date": "2026-10-05T13:54:01+00:00",
+        "received_date": "2026-10-05T13:54:14+00:00",
+        "list_ids": [
+          "u-boot-amlogic"
+        ],
+        "metadata_truncated": false,
+        "lore_url": "https://lore.kernel.org/r/20261005135406.509901-1-sanderson@brivo.com"
+      },
+      "raw_sha256": "bdca0796aa6fb59a58a98f866360eec82806d87f45e225d2328ba3347a0ce59f",
+      "raw_bytes": 5514,
+      "variant_count": 1,
+      "variants": [
+        "cdd8b069e8e6f9ecc7f84fe24e8623e96d43cc8e"
+      ]
+    },
+    {
+      "message": {
+        "message_id": "20261005135406.509901-2-sanderson@brivo.com",
+        "variant": "69479d041290737f3b5c5095a1ac56905742d34a1175a42419abd2b8181dfab1",
+        "subject": "[PATCH v2 1/2] net: designware: Use if instead of #if for DM_MDIO",
+        "from": "Sean Anderson <sanderson@brivo.com>",
+        "from_email": "sanderson@brivo.com",
+        "date": "2026-10-05T13:54:02+00:00",
+        "received_date": "2026-10-05T13:54:14+00:00",
+        "list_ids": [
+          "u-boot-amlogic"
+        ],
+        "metadata_truncated": false,
+        "lore_url": "https://lore.kernel.org/r/20261005135406.509901-2-sanderson@brivo.com"
+      },
+      "raw_sha256": "69479d041290737f3b5c5095a1ac56905742d34a1175a42419abd2b8181dfab1",
+      "raw_bytes": 8685,
+      "variant_count": 1,
+      "variants": [
+        "0691cd43a9ce577ea3e425ac98f7fbb6c620195f"
+      ]
+    },
+    {
+      "message": {
+        "message_id": "20261005135406.509901-3-sanderson@brivo.com",
+        "variant": "0d81d746ba4a271226795b8d10842263a142be3bccf91ac5f8ef487803a04367",
+        "subject": "[PATCH v2 2/2] net: designware: Fix MDIO bus getting bound multiple times",
+        "from": "Sean Anderson <sanderson@brivo.com>",
+        "from_email": "sanderson@brivo.com",
+        "date": "2026-10-05T13:54:03+00:00",
+        "received_date": "2026-10-05T13:54:14+00:00",
+        "list_ids": [
+          "u-boot-amlogic"
+        ],
+        "metadata_truncated": false,
+        "lore_url": "https://lore.kernel.org/r/20261005135406.509901-3-sanderson@brivo.com"
+      },
+      "raw_sha256": "0d81d746ba4a271226795b8d10842263a142be3bccf91ac5f8ef487803a04367",
+      "raw_bytes": 10848,
+      "variant_count": 1,
+      "variants": [
+        "d54b66a17c9cba921e77455b90237a9c2b69f334"
+      ]
+    }
+  ],
+  "thread": {
+    "anchor": "20261005135406.509901-1-sanderson@brivo.com",
+    "expected_items": [
+      {
+        "message_id": "20261005135406.509901-1-sanderson@brivo.com",
+        "variant": "cdd8b069e8e6f9ecc7f84fe24e8623e96d43cc8e",
+        "subject": "[PATCH v2 0/2] net: designware: Fix MDIO bus getting bound multiple times",
+        "from": "Sean Anderson <sanderson@brivo.com>",
+        "from_email": "sanderson@brivo.com",
+        "date": "2026-10-05T13:54:01Z",
+        "received_date": "2026-10-05T13:54:14Z",
+        "list_ids": [
+          "u-boot-amlogic"
+        ],
+        "metadata_truncated": false,
+        "lore_url": "https://lore.kernel.org/r/20261005135406.509901-1-sanderson@brivo.com",
+        "references": [],
+        "in_reply_to": []
+      },
+      {
+        "message_id": "20261005135406.509901-2-sanderson@brivo.com",
+        "variant": "0691cd43a9ce577ea3e425ac98f7fbb6c620195f",
+        "subject": "[PATCH v2 1/2] net: designware: Use if instead of #if for DM_MDIO",
+        "from": "Sean Anderson <sanderson@brivo.com>",
+        "from_email": "sanderson@brivo.com",
+        "date": "2026-10-05T13:54:02Z",
+        "received_date": "2026-10-05T13:54:14Z",
+        "list_ids": [
+          "u-boot-amlogic"
+        ],
+        "metadata_truncated": false,
+        "lore_url": "https://lore.kernel.org/r/20261005135406.509901-2-sanderson@brivo.com",
+        "references": [
+          "20261005135406.509901-1-sanderson@brivo.com"
+        ],
+        "in_reply_to": []
+      },
+      {
+        "message_id": "20261005135406.509901-3-sanderson@brivo.com",
+        "variant": "d54b66a17c9cba921e77455b90237a9c2b69f334",
+        "subject": "[PATCH v2 2/2] net: designware: Fix MDIO bus getting bound multiple times",
+        "from": "Sean Anderson <sanderson@brivo.com>",
+        "from_email": "sanderson@brivo.com",
+        "date": "2026-10-05T13:54:03Z",
+        "received_date": "2026-10-05T13:54:14Z",
+        "list_ids": [
+          "u-boot-amlogic"
+        ],
+        "metadata_truncated": false,
+        "lore_url": "https://lore.kernel.org/r/20261005135406.509901-3-sanderson@brivo.com",
+        "references": [
+          "20261005135406.509901-1-sanderson@brivo.com"
+        ],
+        "in_reply_to": []
+      }
+    ]
+  },
+  "series": {
+    "anchor": "20261005135406.509901-1-sanderson@brivo.com",
+    "expected_items": [
+      {
+        "kind": "version",
+        "group_id": "versions:0",
+        "classification": "versions",
+        "version": 2,
+        "author": "sanderson@brivo.com",
+        "thread_component": "20261005135406.509901-1-sanderson@brivo.com",
+        "membership_evidence": "explicit_thread_links",
+        "series_identity": "thread_association_only",
+        "missing_cover": false,
+        "expected_patch_count": 2,
+        "observed_patch_count": 2,
+        "count_status": "complete_observed",
+        "partial_reroll": "not_established",
+        "synthesized": false,
+        "applied_status": "unknown"
+      },
+      {
+        "kind": "version_detail",
+        "group_id": "versions:0",
+        "field": "cover_message_ids",
+        "values": [
+          "20261005135406.509901-1-sanderson@brivo.com"
+        ]
+      },
+      {
+        "kind": "cover",
+        "group_id": "versions:0",
+        "message_id": "20261005135406.509901-1-sanderson@brivo.com",
+        "variants": [
+          "bdca0796aa6fb59a58a98f866360eec82806d87f45e225d2328ba3347a0ce59f"
+        ],
+        "subject": "[PATCH v2 0/2] net: designware: Fix MDIO bus getting bound multiple times",
+        "ordinal": 0,
+        "patch_id": null,
+        "actually_posted": true,
+        "synthesized": false,
+        "applied_status": "unknown",
+        "subject_truncated": false
+      },
+      {
+        "kind": "patch",
+        "group_id": "versions:0",
+        "message_id": "20261005135406.509901-2-sanderson@brivo.com",
+        "variants": [
+          "69479d041290737f3b5c5095a1ac56905742d34a1175a42419abd2b8181dfab1"
+        ],
+        "subject": "[PATCH v2 1/2] net: designware: Use if instead of #if for DM_MDIO",
+        "ordinal": 1,
+        "patch_id": "c7a8be86856dc8037f3abbc49fc3a0b633fdc138",
+        "actually_posted": true,
+        "synthesized": false,
+        "applied_status": "unknown",
+        "subject_truncated": false
+      },
+      {
+        "kind": "patch",
+        "group_id": "versions:0",
+        "message_id": "20261005135406.509901-3-sanderson@brivo.com",
+        "variants": [
+          "0d81d746ba4a271226795b8d10842263a142be3bccf91ac5f8ef487803a04367"
+        ],
+        "subject": "[PATCH v2 2/2] net: designware: Fix MDIO bus getting bound multiple times",
+        "ordinal": 2,
+        "patch_id": "122dda0712e064021d60a4bcc54e94b176bc078b",
+        "actually_posted": true,
+        "synthesized": false,
+        "applied_status": "unknown",
+        "subject_truncated": false
+      },
+      {
+        "kind": "trailer",
+        "message_id": "20261005135406.509901-1-sanderson@brivo.com",
+        "name": "base-commit",
+        "value": "2b8902913c19eb581fb0d567201c09b8fa46ac74",
+        "source_message_id": "20261005135406.509901-1-sanderson@brivo.com",
+        "source_variant": "bdca0796aa6fb59a58a98f866360eec82806d87f45e225d2328ba3347a0ce59f",
+        "line": 23,
+        "source_line": "base-commit: 2b8902913c19eb581fb0d567201c09b8fa46ac74",
+        "scope": "cover",
+        "quoted": false,
+        "copied_or_embedded": true,
+        "retraction_context": false,
+        "classification": "embedded_claim",
+        "in_diff": false,
+        "verified_approval": false,
+        "authentication": "not_checked",
+        "trailer_type": "utility",
+        "claimed_email": null,
+        "parser": "liblore 0.10.1"
+      },
+      {
+        "kind": "trailer",
+        "message_id": "20261005135406.509901-2-sanderson@brivo.com",
+        "name": "Signed-off-by",
+        "value": "Sean Anderson <sanderson@brivo.com>",
+        "source_message_id": "20261005135406.509901-2-sanderson@brivo.com",
+        "source_variant": "69479d041290737f3b5c5095a1ac56905742d34a1175a42419abd2b8181dfab1",
+        "line": 3,
+        "source_line": "Signed-off-by: Sean Anderson <sanderson@brivo.com>",
+        "scope": "patch",
+        "quoted": false,
+        "copied_or_embedded": true,
+        "retraction_context": false,
+        "classification": "embedded_claim",
+        "in_diff": false,
+        "verified_approval": false,
+        "authentication": "not_checked",
+        "trailer_type": "person",
+        "claimed_email": "sanderson@brivo.com",
+        "parser": "liblore 0.10.1"
+      },
+      {
+        "kind": "trailer",
+        "message_id": "20261005135406.509901-3-sanderson@brivo.com",
+        "name": "Fixes",
+        "value": "5160b4567c71 (\"net: designware: add DM_MDIO support\")",
+        "source_message_id": "20261005135406.509901-3-sanderson@brivo.com",
+        "source_variant": "0d81d746ba4a271226795b8d10842263a142be3bccf91ac5f8ef487803a04367",
+        "line": 20,
+        "source_line": "Fixes: 5160b4567c71 (\"net: designware: add DM_MDIO support\")",
+        "scope": "patch",
+        "quoted": false,
+        "copied_or_embedded": true,
+        "retraction_context": false,
+        "classification": "embedded_claim",
+        "in_diff": false,
+        "verified_approval": false,
+        "authentication": "not_checked",
+        "trailer_type": "utility",
+        "claimed_email": null,
+        "parser": "liblore 0.10.1"
+      },
+      {
+        "kind": "trailer",
+        "message_id": "20261005135406.509901-3-sanderson@brivo.com",
+        "name": "Signed-off-by",
+        "value": "Sean Anderson <sanderson@brivo.com>",
+        "source_message_id": "20261005135406.509901-3-sanderson@brivo.com",
+        "source_variant": "0d81d746ba4a271226795b8d10842263a142be3bccf91ac5f8ef487803a04367",
+        "line": 21,
+        "source_line": "Signed-off-by: Sean Anderson <sanderson@brivo.com>",
+        "scope": "patch",
+        "quoted": false,
+        "copied_or_embedded": true,
+        "retraction_context": false,
+        "classification": "embedded_claim",
+        "in_diff": false,
+        "verified_approval": false,
+        "authentication": "not_checked",
+        "trailer_type": "person",
+        "claimed_email": "sanderson@brivo.com",
+        "parser": "liblore 0.10.1"
+      }
+    ]
+  },
+  "search_headers": {
+    "20261005135406.509901-3-sanderson@brivo.com": {
+      "message_id": "20261005135406.509901-3-sanderson@brivo.com",
+      "variant": "d54b66a17c9cba921e77455b90237a9c2b69f334",
+      "subject": "[PATCH v2 2/2] net: designware: Fix MDIO bus getting bound multiple times",
+      "from": "Sean Anderson <sanderson@brivo.com>",
+      "from_email": "sanderson@brivo.com",
+      "date": "2026-10-05T13:54:03Z",
+      "received_date": "2026-10-05T13:54:14Z",
+      "list_ids": [
+        "u-boot-amlogic"
+      ],
+      "metadata_truncated": false,
+      "lore_url": "https://lore.kernel.org/r/20261005135406.509901-3-sanderson@brivo.com"
+    },
+    "20261005135406.509901-2-sanderson@brivo.com": {
+      "message_id": "20261005135406.509901-2-sanderson@brivo.com",
+      "variant": "0691cd43a9ce577ea3e425ac98f7fbb6c620195f",
+      "subject": "[PATCH v2 1/2] net: designware: Use if instead of #if for DM_MDIO",
+      "from": "Sean Anderson <sanderson@brivo.com>",
+      "from_email": "sanderson@brivo.com",
+      "date": "2026-10-05T13:54:02Z",
+      "received_date": "2026-10-05T13:54:14Z",
+      "list_ids": [
+        "u-boot-amlogic"
+      ],
+      "metadata_truncated": false,
+      "lore_url": "https://lore.kernel.org/r/20261005135406.509901-2-sanderson@brivo.com"
+    },
+    "20261005135406.509901-1-sanderson@brivo.com": {
+      "message_id": "20261005135406.509901-1-sanderson@brivo.com",
+      "variant": "cdd8b069e8e6f9ecc7f84fe24e8623e96d43cc8e",
+      "subject": "[PATCH v2 0/2] net: designware: Fix MDIO bus getting bound multiple times",
+      "from": "Sean Anderson <sanderson@brivo.com>",
+      "from_email": "sanderson@brivo.com",
+      "date": "2026-10-05T13:54:01Z",
+      "received_date": "2026-10-05T13:54:14Z",
+      "list_ids": [
+        "u-boot-amlogic"
+      ],
+      "metadata_truncated": false,
+      "lore_url": "https://lore.kernel.org/r/20261005135406.509901-1-sanderson@brivo.com"
+    }
+  }
+}

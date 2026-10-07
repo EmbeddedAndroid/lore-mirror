@@ -1,0 +1,19 @@
+From: Fixture Author <fixture@example.invalid>
+To: Fixture List <list@example.invalid>
+Subject: [PATCH] Alias lookup regression
+Date: Thu, 01 Jan 2026 12:00:00 +0000
+Message-ID: <canonical-alias-fixture@example.invalid>
+Content-Type: text/plain; charset=utf-8
+Message-ID: <secondary-alias-fixture@example.invalid>
+
+Synthetic regression fixture.
+
+Signed-off-by: Fixture Author <fixture@example.invalid>
+---
+diff --git a/drivers/example.c b/drivers/example.c
+index 1111111..2222222 100644
+--- a/drivers/example.c
++++ b/drivers/example.c
+@@ -1 +1 @@
+-old
++new

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lore-mirror-v1"
+version = "0.1.0"
+description = "Bounded, local-only public-inbox mail MCP and issue service"
+requires-python = ">=3.11"
+dependencies = ["mcp==1.29.0", "liblore==0.10.1"]
+
+[project.scripts]
+lore-mirror = "lore_mirror.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,968 @@
+{
+  "as_of": "2026-10-07T16:16:03.743191+00:00",
+  "phase": "four_list_index_ready_sync_degraded",
+  "approved_scope": [
+    "devicetree-spec",
+    "u-boot-amlogic",
+    "linux-arm-msm",
+    "u-boot"
+  ],
+  "deferred_scope": [
+    "linux-devicetree",
+    "linux-arm-kernel"
+  ],
+  "scope_note": "The user approved this four-list subset and deferred devicetree/linux-arm-kernel to a larger host.",
+  "public_inbox_commit": "94b6bbb95cb88a6de59458b47869c74fc0c901ad",
+  "xapian_version": "1.4.29",
+  "perl": "5.40.1",
+  "operating_system": "Debian 13",
+  "disk_total_bytes": 33770192896,
+  "disk_free_bytes": 11662106624,
+  "minimum_free_fraction": 0.3,
+  "lists": {
+    "devicetree-spec": {
+      "basic_index": {
+        "log": "/workspace/shared/lore-mirror-data/logs/basic-devicetree-spec.log",
+        "peak_aggregate_rss_bytes_sampled": 51802112,
+        "returncode": 0,
+        "seconds": 2.257
+      },
+      "budget": {
+        "checked_at": "2026-10-07T13:09:22.551806+00:00",
+        "complete": true,
+        "epochs": [
+          {
+            "complete": true,
+            "epoch": "/devicetree-spec/git/0.git",
+            "pack_bytes": 5153956,
+            "packs": [
+              {
+                "bytes": 5153956,
+                "name": "pack-da224b3609908df40a10ec57258b95d9881832ce.pack"
+              }
+            ]
+          }
+        ],
+        "known_pack_bytes": 5153956
+      },
+      "checked_at": "2026-10-07T16:00:00.012112+00:00",
+      "extindex": {
+        "log": "/workspace/shared/lore-mirror-data/logs/extindex-devicetree-spec.log",
+        "peak_aggregate_rss_bytes_sampled": 364929024,
+        "returncode": 0,
+        "seconds": 11.044
+      },
+      "fetch": {
+        "log": "/workspace/shared/lore-mirror-data/logs/fetch-devicetree-spec.log",
+        "peak_aggregate_rss_bytes_sampled": 39268352,
+        "returncode": 0,
+        "seconds": 4.265
+      },
+      "fetched_at": "2026-10-07T13:09:26.818868+00:00",
+      "fetched_fingerprints": {
+        "/devicetree-spec/git/0.git": "cd9fa5b9ef5e0ef6550b1710151f3d129e6ced62"
+      },
+      "fetched_refs": {
+        "0.git": [
+          "refs/heads/master 63c32b01d4e416e71d991f3ef7206695d96c9dd8"
+        ]
+      },
+      "hourly_delta": {
+        "changed": false,
+        "checked_at": "2026-10-07T16:00:00.012119+00:00",
+        "configured_interval_seconds": 3600,
+        "elapsed_observation_seconds": 10219.636266,
+        "git_bytes": 0,
+        "index_bytes": 0,
+        "is_hourly_observation": true,
+        "messages": 0,
+        "note": "Measured local incremental change; source catch-up/backfills may affect this observation."
+      },
+      "index_dirty": false,
+      "indexed_at": "2026-10-07T13:09:40.375853+00:00",
+      "indexed_fingerprints": {
+        "/devicetree-spec/git/0.git": "cd9fa5b9ef5e0ef6550b1710151f3d129e6ced62"
+      },
+      "initial_indexed_at": "2026-10-07T13:09:40.375853+00:00",
+      "initial_measurements": {
+        "basic_index_bytes": {
+          "allocated": 1974272,
+          "apparent": 1951336
+        },
+        "date_bounds": {
+          "received_date_max": "2026-10-01T03:07:21+00:00",
+          "received_date_min": "2014-02-17T18:05:44+00:00",
+          "sender_date_max": "2026-10-01T03:07:12+00:00",
+          "sender_date_min": "2014-02-17T18:05:44+00:00"
+        },
+        "extindex_increment_bytes": 31203328,
+        "git_bytes": {
+          "allocated": 5459968,
+          "apparent": 5386967
+        },
+        "index_seconds": 13.301,
+        "messages": 1748,
+        "peak_aggregate_rss_bytes_sampled": 364929024,
+        "shared_extindex_total_bytes": {
+          "allocated": 31203328,
+          "apparent": 31167278
+        }
+      },
+      "last_attempt_at": "2026-10-07T13:09:22.552630+00:00",
+      "last_error": null,
+      "measurements": {
+        "basic_index_bytes": {
+          "allocated": 1974272,
+          "apparent": 1951336
+        },
+        "date_bounds": {
+          "received_date_max": "2026-10-01T03:07:21+00:00",
+          "received_date_min": "2014-02-17T18:05:44+00:00",
+          "sender_date_max": "2026-10-01T03:07:12+00:00",
+          "sender_date_min": "2014-02-17T18:05:44+00:00"
+        },
+        "extindex_increment_bytes": 31203328,
+        "git_bytes": {
+          "allocated": 5459968,
+          "apparent": 5386967
+        },
+        "index_seconds": 13.301,
+        "messages": 1748,
+        "peak_aggregate_rss_bytes_sampled": 364929024,
+        "shared_extindex_total_bytes": {
+          "allocated": 31203328,
+          "apparent": 31167278
+        }
+      },
+      "retry_count": 0,
+      "status": "ready",
+      "upstream_epochs": {
+        "/devicetree-spec/git/0.git": "cd9fa5b9ef5e0ef6550b1710151f3d129e6ced62"
+      }
+    },
+    "linux-arm-msm": {
+      "admission": {
+        "basis": "Configured minimum or measured large-list cost; not a guaranteed capacity prediction",
+        "pack_sizes_complete": true,
+        "storage_multiplier": 5.771823530191204
+      },
+      "basic_index": {
+        "log": "/workspace/shared/lore-mirror-data/logs/basic-linux-arm-msm.log",
+        "peak_aggregate_rss_bytes_sampled": 40464384,
+        "returncode": 0,
+        "seconds": 0.502
+      },
+      "budget": {
+        "checked_at": "2026-10-07T13:10:46.810432+00:00",
+        "complete": true,
+        "epochs": [
+          {
+            "complete": true,
+            "epoch": "/linux-arm-msm/git/0.git",
+            "pack_bytes": 1103921824,
+            "packs": [
+              {
+                "bytes": 1103921824,
+                "name": "pack-c9c90c3ecd4430c554169568a29217cb431c302f.pack"
+              }
+            ]
+          },
+          {
+            "complete": true,
+            "epoch": "/linux-arm-msm/git/1.git",
+            "pack_bytes": 101325866,
+            "packs": [
+              {
+                "bytes": 101325866,
+                "name": "pack-0523747a71ff19a90fbb08c8d4484edd49b49557.pack"
+              }
+            ]
+          }
+        ],
+        "known_pack_bytes": 1205247690
+      },
+      "checked_at": "2026-10-07T16:00:00.013505+00:00",
+      "extindex": {
+        "log": "/workspace/shared/lore-mirror-data/logs/extindex-linux-arm-msm.log",
+        "peak_aggregate_rss_bytes_sampled": 99438592,
+        "returncode": 0,
+        "seconds": 0.753
+      },
+      "fetch": {
+        "log": "/workspace/shared/lore-mirror-data/logs/fetch-linux-arm-msm.log",
+        "peak_aggregate_rss_bytes_sampled": 47542272,
+        "returncode": 0,
+        "seconds": 11.788
+      },
+      "fetched_at": "2026-10-07T16:00:11.824651+00:00",
+      "fetched_fingerprints": {
+        "/linux-arm-msm/git/0.git": "7000f799321e16eab82b1a6bd67011ff202fb989",
+        "/linux-arm-msm/git/1.git": "3f46add52a2854bb248f46554572452959dfe178"
+      },
+      "fetched_refs": {
+        "0.git": [
+          "refs/heads/master 568d367765dbe737716ef63301ab7dacc596cc12",
+          "refs/meta/origins a2bf59b05a71f8a4aa4fed5a4b752cb3b29a91ef"
+        ],
+        "1.git": [
+          "refs/heads/master 1bf5e6e43f4475d8fc2c3a43ffeba30dd0c7936f"
+        ]
+      },
+      "hourly_delta": {
+        "bootstrap": false,
+        "checked_at": "2026-10-07T16:00:13.402292+00:00",
+        "elapsed_observation_seconds": 7074.11789,
+        "git_bytes": 479232,
+        "index_bytes": 176128,
+        "is_hourly_observation": true,
+        "messages": 20,
+        "note": "Measured local incremental change; source catch-up/backfills may affect this observation."
+      },
+      "index_dirty": false,
+      "indexed_at": "2026-10-07T16:00:13.402300+00:00",
+      "indexed_fingerprints": {
+        "/linux-arm-msm/git/0.git": "7000f799321e16eab82b1a6bd67011ff202fb989",
+        "/linux-arm-msm/git/1.git": "3f46add52a2854bb248f46554572452959dfe178"
+      },
+      "initial_indexed_at": "2026-10-07T14:02:19.284402+00:00",
+      "initial_measurements": {
+        "basic_index_bytes": {
+          "allocated": 303534080,
+          "apparent": 303502991
+        },
+        "date_bounds": {
+          "received_date_max": "2026-10-07T12:56:23+00:00",
+          "received_date_min": "2010-03-05T21:26:20+00:00",
+          "sender_date_max": "2026-10-07T12:54:12+00:00",
+          "sender_date_min": "2010-03-05T21:26:12+00:00"
+        },
+        "extindex_increment_bytes": 5596749824,
+        "git_bytes": {
+          "allocated": 1236484096,
+          "apparent": 1236332826
+        },
+        "index_seconds": 2999.77,
+        "messages": 314070,
+        "peak_aggregate_rss_bytes_sampled": 1902362624,
+        "shared_extindex_total_bytes": {
+          "allocated": 5752651776,
+          "apparent": 5752563820
+        }
+      },
+      "last_attempt_at": "2026-10-07T16:00:00.035594+00:00",
+      "last_error": null,
+      "measurements": {
+        "basic_index_bytes": {
+          "allocated": 303562752,
+          "apparent": 303531663
+        },
+        "date_bounds": {
+          "received_date_max": "2026-10-07T15:58:54+00:00",
+          "received_date_min": "2010-03-05T21:26:20+00:00",
+          "sender_date_max": "2026-10-07T15:58:48+00:00",
+          "sender_date_min": "2010-03-05T21:26:12+00:00"
+        },
+        "extindex_increment_bytes": 176128,
+        "git_bytes": {
+          "allocated": 1236963328,
+          "apparent": 1236602564
+        },
+        "index_seconds": 1.255,
+        "messages": 314090,
+        "peak_aggregate_rss_bytes_sampled": 99438592,
+        "shared_extindex_total_bytes": {
+          "allocated": 14836563968,
+          "apparent": 14836452244
+        }
+      },
+      "retry_count": 0,
+      "status": "ready",
+      "upstream_epochs": {
+        "/linux-arm-msm/git/0.git": "7000f799321e16eab82b1a6bd67011ff202fb989",
+        "/linux-arm-msm/git/1.git": "3f46add52a2854bb248f46554572452959dfe178"
+      }
+    },
+    "u-boot": {
+      "admission": {
+        "basis": "Configured minimum or measured large-list cost; not a guaranteed capacity prediction",
+        "pack_sizes_complete": true,
+        "storage_multiplier": 6.8464453288594305
+      },
+      "basic_index": {
+        "log": "/workspace/shared/lore-mirror-data/logs/basic-u-boot.log",
+        "peak_aggregate_rss_bytes_sampled": 262144,
+        "returncode": 0,
+        "seconds": 0.252
+      },
+      "budget": {
+        "checked_at": "2026-10-07T14:02:45.320536+00:00",
+        "complete": true,
+        "epochs": [
+          {
+            "complete": true,
+            "epoch": "/u-boot/git/0.git",
+            "pack_bytes": 1074429392,
+            "packs": [
+              {
+                "bytes": 1074429392,
+                "name": "pack-304ce3ddb0e948666b77feae8fd356fdce911bf2.pack"
+              }
+            ]
+          },
+          {
+            "complete": true,
+            "epoch": "/u-boot/git/1.git",
+            "pack_bytes": 497205530,
+            "packs": [
+              {
+                "bytes": 497205530,
+                "name": "pack-252ca33ecf07a83b925c3e292a2b205bb6058467.pack"
+              }
+            ]
+          }
+        ],
+        "known_pack_bytes": 1571634922
+      },
+      "checked_at": "2026-10-07T16:00:13.403292+00:00",
+      "extindex": {
+        "log": "/workspace/shared/lore-mirror-data/logs/extindex-u-boot.log",
+        "peak_aggregate_rss_bytes_sampled": 131072,
+        "returncode": 0,
+        "seconds": 0.252
+      },
+      "fetch": {
+        "log": "/workspace/shared/lore-mirror-data/logs/fetch-u-boot.log",
+        "peak_aggregate_rss_bytes_sampled": 39378944,
+        "returncode": 0,
+        "seconds": 6.016
+      },
+      "fetched_at": "2026-10-07T16:00:19.429410+00:00",
+      "fetched_fingerprints": {
+        "/u-boot/git/0.git": "b55fe984649a96ec461c2245269d8b269c9a3a51",
+        "/u-boot/git/1.git": "460005b72e941821318d2676927f7d6dfaecc5bb"
+      },
+      "fetched_refs": {
+        "0.git": [
+          "refs/heads/master 02d0dd0bb3d222f3e9deb3329f222b82ecd049ac",
+          "refs/meta/origins 8621a69d14168c545d09b7e6e2b8c33cf5b6052d"
+        ],
+        "1.git": [
+          "refs/heads/master 5bd03ffe7602e76b89fcf6e0c30c05d892c1fa3b"
+        ]
+      },
+      "hourly_delta": {
+        "bootstrap": false,
+        "checked_at": "2026-10-07T16:00:20.417502+00:00",
+        "elapsed_observation_seconds": 279.753007,
+        "git_bytes": 0,
+        "index_bytes": 0,
+        "is_hourly_observation": false,
+        "messages": 0,
+        "note": "Immediate post-bootstrap verification; not an hourly observation."
+      },
+      "index_dirty": false,
+      "indexed_at": "2026-10-07T16:00:20.417508+00:00",
+      "indexed_fingerprints": {
+        "/u-boot/git/0.git": "b55fe984649a96ec461c2245269d8b269c9a3a51",
+        "/u-boot/git/1.git": "460005b72e941821318d2676927f7d6dfaecc5bb"
+      },
+      "initial_indexed_at": "2026-10-07T15:55:40.664495+00:00",
+      "initial_measurements": {
+        "basic_index_bytes": {
+          "allocated": 465313792,
+          "apparent": 465282706
+        },
+        "date_bounds": {
+          "received_date_max": "2026-10-07T13:17:48+00:00",
+          "received_date_min": "2000-03-08T09:02:22+00:00",
+          "sender_date_max": "2026-10-07T12:16:57+00:00",
+          "sender_date_min": "2000-03-08T09:02:22+00:00"
+        },
+        "extindex_increment_bytes": 9083736064,
+        "git_bytes": {
+          "allocated": 1633308672,
+          "apparent": 1633164988
+        },
+        "index_seconds": 6655.085,
+        "messages": 632345,
+        "peak_aggregate_rss_bytes_sampled": 1632903168,
+        "shared_extindex_total_bytes": {
+          "allocated": 14836387840,
+          "apparent": 14836276116
+        }
+      },
+      "last_attempt_at": "2026-10-07T16:00:13.412001+00:00",
+      "last_error": null,
+      "measurements": {
+        "basic_index_bytes": {
+          "allocated": 465313792,
+          "apparent": 465282706
+        },
+        "date_bounds": {
+          "received_date_max": "2026-10-07T13:17:48+00:00",
+          "received_date_min": "2000-03-08T09:02:22+00:00",
+          "sender_date_max": "2026-10-07T12:16:57+00:00",
+          "sender_date_min": "2000-03-08T09:02:22+00:00"
+        },
+        "extindex_increment_bytes": 0,
+        "git_bytes": {
+          "allocated": 1633308672,
+          "apparent": 1633164988
+        },
+        "index_seconds": 0.504,
+        "messages": 632345,
+        "peak_aggregate_rss_bytes_sampled": 39378944,
+        "shared_extindex_total_bytes": {
+          "allocated": 14836563968,
+          "apparent": 14836452244
+        }
+      },
+      "retry_count": 0,
+      "status": "ready",
+      "upstream_epochs": {
+        "/u-boot/git/0.git": "b55fe984649a96ec461c2245269d8b269c9a3a51",
+        "/u-boot/git/1.git": "460005b72e941821318d2676927f7d6dfaecc5bb"
+      }
+    },
+    "u-boot-amlogic": {
+      "basic_index": {
+        "log": "/workspace/shared/lore-mirror-data/logs/basic-u-boot-amlogic.log",
+        "peak_aggregate_rss_bytes_sampled": 49168384,
+        "returncode": 0,
+        "seconds": 4.262
+      },
+      "budget": {
+        "checked_at": "2026-10-07T13:09:48.749525+00:00",
+        "complete": true,
+        "epochs": [
+          {
+            "complete": true,
+            "epoch": "/u-boot-amlogic/git/0.git",
+            "pack_bytes": 10324179,
+            "packs": [
+              {
+                "bytes": 10324179,
+                "name": "pack-36ea0a7d2f88030cfcdb71891660434ebfdd5fcf.pack"
+              }
+            ]
+          }
+        ],
+        "known_pack_bytes": 10324179
+      },
+      "checked_at": "2026-10-07T16:00:00.012806+00:00",
+      "extindex": {
+        "log": "/workspace/shared/lore-mirror-data/logs/extindex-u-boot-amlogic.log",
+        "peak_aggregate_rss_bytes_sampled": 412168192,
+        "returncode": 0,
+        "seconds": 25.107
+      },
+      "fetch": {
+        "log": "/workspace/shared/lore-mirror-data/logs/fetch-u-boot-amlogic.log",
+        "peak_aggregate_rss_bytes_sampled": 39383040,
+        "returncode": 0,
+        "seconds": 5.518
+      },
+      "fetched_at": "2026-10-07T13:09:54.269314+00:00",
+      "fetched_fingerprints": {
+        "/u-boot-amlogic/git/0.git": "c3f1aa1b8c489e326e9a3c88221b733bf76b5e3b"
+      },
+      "fetched_refs": {
+        "0.git": [
+          "refs/heads/master 3ad25e1ff71af3f8761c2c750660e70df82ccc89"
+        ]
+      },
+      "hourly_delta": {
+        "changed": false,
+        "checked_at": "2026-10-07T16:00:00.012812+00:00",
+        "configured_interval_seconds": 3600,
+        "elapsed_observation_seconds": 10176.118429,
+        "git_bytes": 0,
+        "index_bytes": 0,
+        "is_hourly_observation": true,
+        "messages": 0,
+        "note": "Measured local incremental change; source catch-up/backfills may affect this observation."
+      },
+      "index_dirty": false,
+      "indexed_at": "2026-10-07T13:10:23.894383+00:00",
+      "indexed_fingerprints": {
+        "/u-boot-amlogic/git/0.git": "c3f1aa1b8c489e326e9a3c88221b733bf76b5e3b"
+      },
+      "initial_indexed_at": "2026-10-07T13:10:23.894383+00:00",
+      "initial_measurements": {
+        "basic_index_bytes": {
+          "allocated": 3137536,
+          "apparent": 3114608
+        },
+        "date_bounds": {
+          "received_date_max": "2026-10-05T13:54:14+00:00",
+          "received_date_min": "2019-01-30T13:48:26+00:00",
+          "sender_date_max": "2026-10-05T13:54:03+00:00",
+          "sender_date_min": "2019-01-30T13:48:23+00:00"
+        },
+        "extindex_increment_bytes": 124698624,
+        "git_bytes": {
+          "allocated": 10850304,
+          "apparent": 10778036
+        },
+        "index_seconds": 29.369,
+        "messages": 3121,
+        "peak_aggregate_rss_bytes_sampled": 412168192,
+        "shared_extindex_total_bytes": {
+          "allocated": 155901952,
+          "apparent": 155854088
+        }
+      },
+      "last_attempt_at": "2026-10-07T13:09:48.750491+00:00",
+      "last_error": null,
+      "measurements": {
+        "basic_index_bytes": {
+          "allocated": 3137536,
+          "apparent": 3114608
+        },
+        "date_bounds": {
+          "received_date_max": "2026-10-05T13:54:14+00:00",
+          "received_date_min": "2019-01-30T13:48:26+00:00",
+          "sender_date_max": "2026-10-05T13:54:03+00:00",
+          "sender_date_min": "2019-01-30T13:48:23+00:00"
+        },
+        "extindex_increment_bytes": 124698624,
+        "git_bytes": {
+          "allocated": 10850304,
+          "apparent": 10778036
+        },
+        "index_seconds": 29.369,
+        "messages": 3121,
+        "peak_aggregate_rss_bytes_sampled": 412168192,
+        "shared_extindex_total_bytes": {
+          "allocated": 155901952,
+          "apparent": 155854088
+        }
+      },
+      "retry_count": 0,
+      "status": "ready",
+      "upstream_epochs": {
+        "/u-boot-amlogic/git/0.git": "c3f1aa1b8c489e326e9a3c88221b733bf76b5e3b"
+      }
+    }
+  },
+  "shared_extindex": {
+    "allocated": 14836563968,
+    "apparent": 14836452244
+  },
+  "advertised_pack_census": {
+    "checked_at": 1791378215.0189538,
+    "rows": [
+      {
+        "epoch": "/linux-arm-kernel/git/1.git",
+        "packs": [],
+        "pack_bytes": 0
+      },
+      {
+        "epoch": "/linux-devicetree/git/0.git",
+        "packs": [],
+        "pack_bytes": 0
+      },
+      {
+        "epoch": "/linux-devicetree/git/1.git",
+        "packs": [],
+        "pack_bytes": 0
+      },
+      {
+        "epoch": "/linux-coco/git/0.git",
+        "packs": [
+          {
+            "name": "pack-a2c6821561bb6b96b6d075e4c9ce51a67a5f1417.pack",
+            "bytes": 114007450
+          }
+        ],
+        "pack_bytes": 114007450
+      },
+      {
+        "epoch": "/u-boot/git/1.git",
+        "packs": [
+          {
+            "name": "pack-252ca33ecf07a83b925c3e292a2b205bb6058467.pack",
+            "bytes": 497205530
+          }
+        ],
+        "pack_bytes": 497205530
+      },
+      {
+        "epoch": "/linux-arm-msm/git/0.git",
+        "packs": [
+          {
+            "name": "pack-c9c90c3ecd4430c554169568a29217cb431c302f.pack",
+            "bytes": 1103921824
+          }
+        ],
+        "pack_bytes": 1103921824
+      },
+      {
+        "epoch": "/u-boot-amlogic/git/0.git",
+        "packs": [
+          {
+            "name": "pack-36ea0a7d2f88030cfcdb71891660434ebfdd5fcf.pack",
+            "bytes": 10324179
+          }
+        ],
+        "pack_bytes": 10324179
+      },
+      {
+        "epoch": "/linux-arm-kernel/git/2.git",
+        "packs": [
+          {
+            "name": "pack-3d547537094b577f5a37a5f65d522402fbcb0221.pack",
+            "bytes": 1083903178
+          }
+        ],
+        "pack_bytes": 1083903178
+      },
+      {
+        "epoch": "/u-boot/git/0.git",
+        "packs": [
+          {
+            "name": "pack-304ce3ddb0e948666b77feae8fd356fdce911bf2.pack",
+            "bytes": 1074429392
+          }
+        ],
+        "pack_bytes": 1074429392
+      },
+      {
+        "epoch": "/linux-arm-kernel/git/3.git",
+        "packs": [
+          {
+            "name": "pack-842400aaddb507ffe0edbbd69ad99acc9ff1253d.pack",
+            "bytes": 1036473777
+          }
+        ],
+        "pack_bytes": 1036473777
+      },
+      {
+        "epoch": "/linux-devicetree/git/2.git",
+        "packs": [
+          {
+            "name": "pack-e3a98dfd1160c64b6315029ad07184e10ba9f5b9.pack",
+            "bytes": 1096548837
+          }
+        ],
+        "pack_bytes": 1096548837
+      },
+      {
+        "epoch": "/devicetree-spec/git/0.git",
+        "packs": [
+          {
+            "name": "pack-da224b3609908df40a10ec57258b95d9881832ce.pack",
+            "bytes": 5153956
+          }
+        ],
+        "pack_bytes": 5153956
+      },
+      {
+        "epoch": "/linux-arm-kernel/git/0.git",
+        "packs": [],
+        "pack_bytes": 0
+      },
+      {
+        "epoch": "/linux-devicetree/git/3.git",
+        "packs": [
+          {
+            "name": "pack-b6b59ca84605233b4c395056d0393279a6a80bc3.pack",
+            "bytes": 436628149
+          }
+        ],
+        "pack_bytes": 436628149
+      },
+      {
+        "epoch": "/linux-arm-msm/git/1.git",
+        "packs": [
+          {
+            "name": "pack-0523747a71ff19a90fbb08c8d4484edd49b49557.pack",
+            "bytes": 101325866
+          }
+        ],
+        "pack_bytes": 101325866
+      }
+    ]
+  },
+  "limitations": [
+    "This is a bounded pilot, not an all-lore archive. Scope and completion are distinct.",
+    "Per-inbox message counts include cross-posts. Do not sum them to claim unique corpus messages.",
+    "Per-list extindex bytes are marginal growth in ingestion order; they are not independent complete indexes.",
+    "Peak RAM is sampled aggregate subprocess-tree RSS at 250ms intervals, not an exact allocation high-water mark.",
+    "The two small lists were initially cloned before the instrumented coordinator run; their recorded fetch steps are subsequent verification/update passes. Their initial clone duration and clone peak RAM were not measured. Initial basic/full-index timings and RAM were instrumented.",
+    "Advertised pack bytes are not measured negotiated Git network transfer bytes. Empty pack listings may refer to pooled objects and are unknown, not zero.",
+    "An immediate second cycle is a restart/idempotence check, not an hourly growth observation. Only the explicitly timed >=1h observations in this report establish hourly deltas, and only for their measured lists.",
+    "LEI daemon is blocked in this executor by socket(AF_UNIX, SOCK_SEQPACKET) Operation not permitted. The pinned direct-library query adapter is tested instead.",
+    "The linux-arm-msm basic-index log contains 34 lines labelled Message-ID too long, truncating. Warnings repeat and related XRF/reference terms also appear; unique affected messages and header fields were not counted. Raw Git bytes remain preserved, while native identifier/reference search terms may be truncated or skipped.",
+    "No full-corpus capacity projection is justified by these pilot data."
+  ],
+  "selected_scope_advertised_pack_lower_bound_bytes": 2792360747,
+  "selected_scope_unknown_pack_epochs": [],
+  "pool_pack_measurements": [
+    {
+      "url": "https://erol.kernel.org/objstore/d741f450-1437-4c0a-a8f0-d40b7ab6aa0b.git/objects/pack/pack-5e9215b3851c362865f9d46d226a642d1070529b.pack",
+      "bytes": 2268419924,
+      "checked_at": 1791384242.5273356
+    },
+    {
+      "url": "https://erol.kernel.org/objstore/4e167876-6a8e-403c-8d8c-562a11e8d545.git/objects/pack/pack-0c472ce3075fe0977f756c6810b6a5e65baae34f.pack",
+      "bytes": 2301322180,
+      "checked_at": 1791384242.438248
+    }
+  ],
+  "selected_scope_initial_unknown_pack_epochs": [],
+  "selected_scope_advertised_pack_bytes_including_unique_pools": 2792360747,
+  "remaining_namespace_advertised_pack_bytes": {
+    "linux-devicetree": 3801596910,
+    "linux-arm-kernel": 4421699135
+  },
+  "additional_elapsed_observations": [
+    {
+      "list_id": "linux-arm-msm",
+      "baseline_indexed_at": "2026-10-07T14:02:19.284402+00:00",
+      "baseline_source_fetched_at": "2026-10-07T13:12:19.137682+00:00",
+      "observed_at": "2026-10-07T16:00:20.418507+00:00",
+      "updated_source_fetched_at": "2026-10-07T16:00:11.824651+00:00",
+      "elapsed_seconds": 7081.134105,
+      "at_least_one_hour": true,
+      "baseline_fingerprints": {
+        "/linux-arm-msm/git/0.git": "7000f799321e16eab82b1a6bd67011ff202fb989",
+        "/linux-arm-msm/git/1.git": "2f8dd6504c9f1a49fdfe69ea2d5b130c0b79858d"
+      },
+      "observed_upstream_fingerprints": {
+        "/linux-arm-msm/git/0.git": "7000f799321e16eab82b1a6bd67011ff202fb989",
+        "/linux-arm-msm/git/1.git": "3f46add52a2854bb248f46554572452959dfe178"
+      },
+      "upstream_changed": true,
+      "baseline_messages": 314070,
+      "observed_local_messages": 314090,
+      "local_message_delta": 20,
+      "local_git_allocated_delta_bytes": 479232,
+      "local_basic_index_allocated_delta_bytes": 28672,
+      "shared_extindex_delta_bytes": null,
+      "note": "Actual local mirror change between completed checkpoints. This includes catch-up while the other archive bootstrapped; it is not a clean upstream arrival-rate sample. Shared extindex growth during the baseline interval is excluded."
+    }
+  ],
+  "reconciliation": {
+    "status": "ready",
+    "finished_at": "2026-10-07T16:00:20.418507+00:00",
+    "generation": 2,
+    "latest_message_id_counts": {
+      "devicetree-spec": 1748,
+      "linux-arm-msm": 314090,
+      "u-boot": 632345,
+      "u-boot-amlogic": 3121
+    },
+    "u_boot_immediate_repeat": {
+      "elapsed_since_completed_baseline_seconds": 279.754012,
+      "is_hourly_observation": false,
+      "message_delta": 0,
+      "note": "Immediate post-bootstrap verification/idempotence only; no additional one-hour window was claimed."
+    }
+  },
+  "daemon_state": {
+    "cycle_started_at": "2026-10-07T16:07:19.054563+00:00",
+    "cycles_completed": 1,
+    "interval_seconds": 3600,
+    "last_cycle_finished_at": "2026-10-07T16:07:37.962880+00:00",
+    "last_cycle_status": "error",
+    "next_scheduled_at": "2026-10-07T17:07:37.963803+00:00",
+    "persistence": "Current workspace process; survival after workspace termination is not guaranteed.",
+    "pid": 2,
+    "pid_scope": "current process namespace",
+    "scope": [
+      "devicetree-spec",
+      "u-boot-amlogic",
+      "linux-arm-msm",
+      "u-boot"
+    ],
+    "started_at": "2026-10-07T16:07:19.054215+00:00",
+    "status": "blocked_unverified",
+    "last_recorded_status": "sleeping",
+    "verification": {
+      "checked_at": "2026-10-07T16:14:55.411113+00:00",
+      "coordinator_lock_available": true,
+      "execution_session_id": 12807,
+      "index_lock_available": true,
+      "interpretation": "Hourly scheduling is configured. The first cycle failed at the managed proxy tunnel before an archive response. The execution handle is unavailable and no coordinator lock is held; the recorded retry time is not a verified future run. No alternate network route or new daemon was attempted.",
+      "last_error": "<urlopen error Tunnel connection failed: 403 Forbidden>",
+      "last_recorded_pid": 2,
+      "last_recorded_status": "sleeping",
+      "last_successful_reconciliation_at": "2026-10-07T16:00:20.418507+00:00",
+      "live_process_verified": false,
+      "pid_scope": "current process namespace",
+      "read_safe_index_generation": 2,
+      "recorded_next_scheduled_at": "2026-10-07T17:07:37.963803+00:00",
+      "status_poll_result": "Unknown process id 12807 on the single authorized retry",
+      "target": "https://erol.kernel.org/manifest.js.gz",
+      "verified_successful_daemon_cycles": 0
+    }
+  },
+  "hourly_observation": {
+    "observed_at": "2026-10-07T14:10:31.625772+00:00",
+    "manifest_url": "https://erol.kernel.org/manifest.js.gz",
+    "manifest_sha256": "cdd8c2f2b20164b124965dbee36a77807c9274e4758bcecd316461553a7a3d66",
+    "manifest_bytes": 20633,
+    "lists": {
+      "devicetree-spec": {
+        "baseline_indexed_at": "2026-10-07T13:09:40.375853+00:00",
+        "observed_at": "2026-10-07T14:10:31.625772+00:00",
+        "elapsed_seconds": 3651.2564101219177,
+        "at_least_one_hour": true,
+        "baseline_fingerprints": {
+          "/devicetree-spec/git/0.git": "cd9fa5b9ef5e0ef6550b1710151f3d129e6ced62"
+        },
+        "observed_upstream_fingerprints": {
+          "/devicetree-spec/git/0.git": "cd9fa5b9ef5e0ef6550b1710151f3d129e6ced62"
+        },
+        "upstream_changed": false,
+        "state": "upstream_unchanged",
+        "baseline_messages": 1748,
+        "observed_local_messages": 1748,
+        "local_message_delta": 0,
+        "local_git_allocated_delta_bytes": 0,
+        "local_basic_index_allocated_delta_bytes": 0,
+        "local_git_bytes": {
+          "apparent": 5386967,
+          "allocated": 5459968
+        },
+        "local_basic_index_bytes": {
+          "apparent": 1951336,
+          "allocated": 1974272
+        },
+        "note": "A zero local-byte delta is not evidence of zero upstream activity if fingerprints changed."
+      },
+      "u-boot-amlogic": {
+        "baseline_indexed_at": "2026-10-07T13:10:23.894383+00:00",
+        "observed_at": "2026-10-07T14:10:31.625772+00:00",
+        "elapsed_seconds": 3607.7453124523163,
+        "at_least_one_hour": true,
+        "baseline_fingerprints": {
+          "/u-boot-amlogic/git/0.git": "c3f1aa1b8c489e326e9a3c88221b733bf76b5e3b"
+        },
+        "observed_upstream_fingerprints": {
+          "/u-boot-amlogic/git/0.git": "c3f1aa1b8c489e326e9a3c88221b733bf76b5e3b"
+        },
+        "upstream_changed": false,
+        "state": "upstream_unchanged",
+        "baseline_messages": 3121,
+        "observed_local_messages": 3121,
+        "local_message_delta": 0,
+        "local_git_allocated_delta_bytes": 0,
+        "local_basic_index_allocated_delta_bytes": 0,
+        "local_git_bytes": {
+          "apparent": 10778036,
+          "allocated": 10850304
+        },
+        "local_basic_index_bytes": {
+          "apparent": 3114608,
+          "allocated": 3137536
+        },
+        "note": "A zero local-byte delta is not evidence of zero upstream activity if fingerprints changed."
+      }
+    },
+    "shared_extindex_delta_bytes": null,
+    "shared_extindex_note": "Excluded: another list is undergoing initial bootstrap into the shared extindex. It cannot be attributed to these small lists or treated as ordinary hourly growth.",
+    "method": "One read-only manifest comparison plus local Git/basic-index byte counts and message counts. No Git fetch or indexing was invoked by this observation."
+  },
+  "sync_status": "error",
+  "stratified_scaling": {
+    "large": {
+      "samples": [
+        {
+          "list_id": "linux-arm-msm",
+          "message_ids": 314070,
+          "git_bytes_per_message": 3936.9697710701435,
+          "basic_bytes_per_message": 966.4535931480243,
+          "marginal_shared_extindex_bytes_per_message": 17820.071398095966,
+          "total_bytes_per_message": 22723.494762314134,
+          "index_seconds_per_message": 0.009551278377431782,
+          "total_gib_per_million_message_ids": 21.16290364629974,
+          "index_hours_per_million_message_ids": 2.653132882619939
+        },
+        {
+          "list_id": "u-boot",
+          "message_ids": 632345,
+          "git_bytes_per_message": 2582.9391740268366,
+          "basic_bytes_per_message": 735.8543073796741,
+          "marginal_shared_extindex_bytes_per_message": 14365.15836133756,
+          "total_bytes_per_message": 17683.95184274407,
+          "index_seconds_per_message": 0.010524452632660969,
+          "total_gib_per_million_message_ids": 16.469463559560545,
+          "index_hours_per_million_message_ids": 2.9234590646280467
+        }
+      ],
+      "sample_count": 2,
+      "gib_per_million_range": [
+        16.469463559560545,
+        21.16290364629974
+      ],
+      "index_hours_per_million_range": [
+        2.653132882619939,
+        2.9234590646280467
+      ]
+    },
+    "small": {
+      "samples": [
+        {
+          "list_id": "devicetree-spec",
+          "message_ids": 1748,
+          "git_bytes_per_message": 3123.5514874141877,
+          "basic_bytes_per_message": 1129.446224256293,
+          "marginal_shared_extindex_bytes_per_message": 17850.87414187643,
+          "total_bytes_per_message": 22103.871853546912,
+          "index_seconds_per_message": 0.007609267734553776,
+          "total_gib_per_million_message_ids": 20.58583484361592,
+          "index_hours_per_million_message_ids": 2.113685481820493
+        },
+        {
+          "list_id": "u-boot-amlogic",
+          "message_ids": 3121,
+          "git_bytes_per_message": 3476.5472604934316,
+          "basic_bytes_per_message": 1005.2983018263377,
+          "marginal_shared_extindex_bytes_per_message": 39954.70169817366,
+          "total_bytes_per_message": 44436.54726049343,
+          "index_seconds_per_message": 0.009410124959948734,
+          "total_gib_per_million_message_ids": 41.38475960166513,
+          "index_hours_per_million_message_ids": 2.6139235999857595
+        }
+      ],
+      "sample_count": 2,
+      "gib_per_million_range": [
+        20.58583484361592,
+        41.38475960166513
+      ],
+      "index_hours_per_million_range": [
+        2.113685481820493,
+        2.6139235999857595
+      ]
+    }
+  },
+  "scaling_assumptions": [
+    "N is the unknown sum of per-inbox message-ID counts, including cross-post list memberships; it is not a claimed current unique-message census.",
+    "Sample min/max ranges are conditional scenarios, not confidence intervals or full-corpus forecasts.",
+    "Shared extindex costs are marginal in this ingestion order. Cross-post overlap, content mix, larger untested lists and deduplication change the ratios.",
+    "Index time is measured wall time with configured -j1 indexing, including native helpers, on this shared executor; effective CPU quotas and CPU utilization were not measured.",
+    "Do not scale sampled RSS linearly with message count or assume these samples establish full-manifest peak RAM."
+  ],
+  "approved_four_list_cold_components": {
+    "git_bytes": 2886103040,
+    "basic_index_bytes": 773959680,
+    "shared_extindex_bytes": 14836387840,
+    "known_steady_bytes": 18496450560,
+    "message_id_membership_count": 951284,
+    "index_seconds_sum": 9697.525,
+    "capacity_with_30pct_free_no_rebuild_bytes": 26423500800.0,
+    "illustrative_additional_full_extindex_copy_bytes": 14836387840,
+    "capacity_with_one_extra_extindex_copy_and_30pct_free_bytes": 47618340571.42857,
+    "note": "Known corpus components only. Application/OS/logs/derived-store bytes, observed growth reserve and other simultaneous maintenance work are additional. Extra extindex copy is a scenario, not a measured reindex peak."
+  },
+  "measurement_host": {
+    "os": "Debian 13",
+    "visible_logical_cpus": 9,
+    "visible_memory_kib": 10206508,
+    "effective_cpu_or_memory_quota": "not established",
+    "initial_index_concurrency": 1,
+    "fetch_worker_cap": 2
+  }
+}

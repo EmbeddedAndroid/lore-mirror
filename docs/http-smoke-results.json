@@ -1,0 +1,23 @@
+{
+  "timestamp_utc": "2026-10-07T13:35:31Z",
+  "results": [
+    {
+      "path": "/api/health",
+      "status": 200,
+      "bytes": 695
+    },
+    {
+      "path": "/api/tools/mail.search",
+      "status": 200,
+      "bytes": 1608,
+      "message_count": 2
+    },
+    {
+      "path": "/mcp",
+      "status": 200,
+      "bytes": 479,
+      "message_count": 0
+    }
+  ],
+  "source": "immutable local two-list snapshot; no remote requests"
+}

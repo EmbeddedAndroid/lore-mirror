@@ -1,0 +1,20 @@
+{
+  "commit": "602042bf29f6efde39cfb5fdd9289bf4854bc0c5",
+  "tree": "9d1056524921544d2359e81c6a6697e62e8373ad",
+  "parents": [
+    "0d32b3ec5f902bf40d03db08837f3eafbb6a4577",
+    "980db94e3eeefdd8a1c46f86412c33a7f7806f51"
+  ],
+  "author": {
+    "name": "Linus Torvalds",
+    "email": "torvalds@linux-foundation.org",
+    "time": "Wed Oct 07 02:24:23 2026 +0200"
+  },
+  "committer": {
+    "name": "Linus Torvalds",
+    "email": "torvalds@linux-foundation.org",
+    "time": "Wed Oct 07 02:24:23 2026 +0200"
+  },
+  "message": "Merge tag \u0027wq-for-7.3-rc6-fixes\u0027 of git://git.kernel.org/pub/scm/linux/kernel/git/tj/wq\n\nPull workqueue fixes from Tejun Heo:\n\n - Fix a NULL dereference in the chained work check when a kworker\n   queues work on a draining or destroying workqueue outside work item\n   execution.\n\n* tag \u0027wq-for-7.3-rc6-fixes\u0027 of git://git.kernel.org/pub/scm/linux/kernel/git/tj/wq:\n  workqueue: Fix NULL current_pwq deref in chained work check\n",
+  "tree_diff": []
+}

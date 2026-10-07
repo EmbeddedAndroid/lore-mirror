@@ -1,0 +1,192 @@
+{
+  "timestamp_utc": "2026-10-07T16:03:29.638416+00:00",
+  "source": "completed four-list local native index; no query-path network requests",
+  "temporary_issue_store": true,
+  "mcp_transport": "actual localhost HTTP",
+  "results": [
+    {
+      "operation": "/api/health",
+      "http_status": 200,
+      "response_bytes": 1132,
+      "seconds": 0.002
+    },
+    {
+      "operation": "mail.status",
+      "http_status": 200,
+      "response_bytes": 1132,
+      "seconds": 0.002
+    },
+    {
+      "operation": "mail.list_lists",
+      "http_status": 200,
+      "response_bytes": 1566,
+      "seconds": 0.002,
+      "partial": false,
+      "has_more": false,
+      "matched_count": 4,
+      "returned_items": 4
+    },
+    {
+      "operation": "mail.search",
+      "http_status": 200,
+      "response_bytes": 1540,
+      "seconds": 0.24,
+      "partial": false,
+      "has_more": true,
+      "matched_count": 1154,
+      "returned_items": 2,
+      "list": "devicetree-spec"
+    },
+    {
+      "operation": "mail.search",
+      "http_status": 200,
+      "response_bytes": 1579,
+      "seconds": 0.448,
+      "partial": false,
+      "has_more": true,
+      "matched_count": 2782,
+      "returned_items": 2,
+      "list": "u-boot-amlogic"
+    },
+    {
+      "operation": "mail.search",
+      "http_status": 200,
+      "response_bytes": 1617,
+      "seconds": 1.72,
+      "partial": true,
+      "has_more": true,
+      "matched_count": 10000,
+      "returned_items": 2,
+      "list": "linux-arm-msm"
+    },
+    {
+      "operation": "mail.search",
+      "http_status": 200,
+      "response_bytes": 1609,
+      "seconds": 1.959,
+      "partial": true,
+      "has_more": true,
+      "matched_count": 10000,
+      "returned_items": 2,
+      "list": "u-boot"
+    },
+    {
+      "operation": "mail.get_message",
+      "http_status": 200,
+      "response_bytes": 2838,
+      "seconds": 0.555,
+      "partial": false,
+      "has_more": true,
+      "returned_items": 1
+    },
+    {
+      "operation": "mail.get_thread",
+      "http_status": 200,
+      "response_bytes": 1943,
+      "seconds": 0.485,
+      "partial": false,
+      "has_more": true,
+      "matched_count": 3,
+      "returned_items": 2
+    },
+    {
+      "operation": "mail.get_series",
+      "http_status": 200,
+      "response_bytes": 2221,
+      "seconds": 0.579,
+      "partial": false,
+      "has_more": true,
+      "matched_count": 9,
+      "applied_status": "unknown",
+      "returned_items": 3
+    },
+    {
+      "operation": "mail.in_flight",
+      "http_status": 200,
+      "response_bytes": 2248,
+      "seconds": 0.299,
+      "partial": false,
+      "has_more": false,
+      "matched_count": 2,
+      "returned_items": 2
+    },
+    {
+      "operation": "mail.was_posted",
+      "http_status": 200,
+      "response_bytes": 1138,
+      "seconds": 0.127,
+      "partial": false,
+      "has_more": false,
+      "matched_count": 1,
+      "posted_result": "matches_found",
+      "applied_status": "unknown",
+      "returned_items": 1
+    },
+    {
+      "operation": "issue.report",
+      "http_status": 200,
+      "response_bytes": 287,
+      "seconds": 0.002
+    },
+    {
+      "operation": "issue.get",
+      "http_status": 200,
+      "response_bytes": 287,
+      "seconds": 0.001
+    },
+    {
+      "operation": "issue.list",
+      "http_status": 200,
+      "response_bytes": 212,
+      "seconds": 0.001,
+      "has_more": false,
+      "returned_items": 1
+    },
+    {
+      "operation": "/api/issues.json",
+      "http_status": 200,
+      "response_bytes": 212,
+      "seconds": 0.001,
+      "has_more": false,
+      "returned_items": 1
+    },
+    {
+      "operation": "mcp.initialize",
+      "http_status": 200,
+      "response_bytes": 479,
+      "seconds": 0.002
+    },
+    {
+      "operation": "mcp.initialized",
+      "http_status": 202,
+      "response_bytes": 0,
+      "seconds": 0.001
+    },
+    {
+      "operation": "mcp.tools/list",
+      "http_status": 200,
+      "response_bytes": 7799,
+      "seconds": 0.003
+    }
+  ],
+  "sync_status": {
+    "generation": 2,
+    "updating": false,
+    "unsafe_index": false,
+    "status": "ready",
+    "cycle_started_at": "2026-10-07T15:59:53.030815+00:00",
+    "cycle_finished_at": "2026-10-07T16:00:20.418507+00:00",
+    "next_run_at": "2026-10-07T17:00:20.418990+00:00",
+    "pending_lists": [],
+    "last_success": "2026-10-07T16:00:20.418507+00:00",
+    "last_indexed_at": "2026-10-07T16:00:20.418507+00:00",
+    "stage": "initial_four_list_publication"
+  },
+  "freshness": {
+    "last_success_at": "2026-10-07T16:00:20.418507+00:00",
+    "age_seconds": 182.8,
+    "stale": false,
+    "stale_after_seconds": 7200.0
+  },
+  "daemon": {}
+}

@@ -1,0 +1,18 @@
+{
+  "description": "Synthetic reproduction of a real observed duplicate-Message-ID archive alias. No original discussion prose is copied. The separate real-pilot fixture remains byte-exact real mail.",
+  "canonical_message_id": "canonical-alias-fixture@example.invalid",
+  "alternate_message_id": "secondary-alias-fixture@example.invalid",
+  "original_case_source_url": "https://lore.kernel.org/linux-arm-msm/201012301149.30888.rjw@sisk.pl/",
+  "messages": [
+    {
+      "file": "01.eml",
+      "sha256": "5ffa0b0d8136792940dc9643dc4312a842a1fd13aa3e6b56cf80714bc62e19e8",
+      "synthetic": true
+    },
+    {
+      "file": "02.eml",
+      "sha256": "d43c7d827e0d268c628407f36cdacb12091c73b3042743cc254ad7a6a1074198",
+      "synthetic": true
+    }
+  ]
+}
