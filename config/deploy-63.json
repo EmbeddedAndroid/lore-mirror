@@ -1,0 +1,108 @@
+{
+  "data_dir": "/data",
+  "runtime_dir": "/runtime",
+  "issue_dir": "/issues",
+  "backend": "public-inbox",
+  "lei_bin": "lei",
+  "extindex": "/data/extindex",
+  "public_inbox_config": "/data/public-inbox-config",
+  "upstream": "https://erol.kernel.org",
+  "manifest_url": "https://erol.kernel.org/manifest.js.gz",
+  "interval_seconds": 3600,
+  "max_workers": 2,
+  "min_free_fraction": 0.3,
+  "initial_storage_multiplier": 4,
+  "user_agent": "lore-mirror/0.1 (bounded archive mirror; max 2 workers)",
+  "lists": [
+    {
+      "id": "devicetree-spec",
+      "class": "kernel",
+      "inbox_path": "/data/inboxes/devicetree-spec",
+      "newsgroup": "org.kernel.lore.devicetree-spec",
+      "aliases": [
+        "devicetree-spec"
+      ],
+      "address": "devicetree-spec@vger.kernel.org",
+      "size_class": "small"
+    },
+    {
+      "id": "u-boot-amlogic",
+      "class": "u-boot",
+      "inbox_path": "/data/inboxes/u-boot-amlogic",
+      "newsgroup": "org.kernel.lore.u-boot-amlogic",
+      "aliases": [
+        "u-boot-amlogic"
+      ],
+      "address": "u-boot-amlogic@groups.io",
+      "size_class": "small"
+    },
+    {
+      "id": "linux-arm-msm",
+      "class": "kernel",
+      "inbox_path": "/data/inboxes/linux-arm-msm",
+      "newsgroup": "org.kernel.lore.linux-arm-msm",
+      "aliases": [
+        "linux-arm-msm"
+      ],
+      "address": "linux-arm-msm@vger.kernel.org",
+      "size_class": "large"
+    },
+    {
+      "id": "u-boot",
+      "class": "u-boot",
+      "inbox_path": "/data/inboxes/u-boot",
+      "newsgroup": "org.kernel.lore.u-boot",
+      "aliases": [
+        "u-boot"
+      ],
+      "address": "u-boot@lists.denx.de",
+      "size_class": "large"
+    }
+  ],
+  "limits": {
+    "page_size": 20,
+    "max_page_size": 100,
+    "response_bytes": 65536,
+    "query_timeout": 60,
+    "scan_limit": 10000,
+    "cursor_ttl": 900,
+    "max_sessions": 16,
+    "session_bytes": 8388608
+  },
+  "query_helper": "/app/scripts/public-inbox-query.pl",
+  "perl_bin": "perl",
+  "maintainers_catalogs": {
+    "kernel": {
+      "path": "/app/config/maintainers/linux/MAINTAINERS",
+      "project": "linux",
+      "commit": "602042bf29f6efde39cfb5fdd9289bf4854bc0c5",
+      "sha256": "8b0f4ea5773e130adff828c149757a6aeb5575a3a58d5f7791b3493d727ced0f",
+      "source_url": "https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/602042bf29f6efde39cfb5fdd9289bf4854bc0c5/MAINTAINERS?format=TEXT"
+    },
+    "u-boot": {
+      "path": "/app/config/maintainers/u-boot/MAINTAINERS",
+      "project": "u-boot",
+      "commit": "8d7bc8add17bbc69a58dfe0002eea039dd2dc1bc",
+      "sha256": "008a47789d91b43176b5a711851c4e38150edc72f16a49c00b5ddba91f73402b",
+      "source_url": "https://git.u-boot-project.org/u-boot/u-boot/-/raw/8d7bc8add17bbc69a58dfe0002eea039dd2dc1bc/MAINTAINERS"
+    }
+  },
+  "scope_note": "Host <host> template: generate the full manifest before starting.",
+  "index_batch_size": "4m",
+  "job_memory_limit_bytes": 1879048192,
+  "job_timeout_seconds": 604800,
+  "allowed_hosts": [
+    "127.0.0.1:*",
+    "127.0.0.1",
+    "localhost:*",
+    "localhost",
+    "[::1]:*",
+    "[::1]",
+    "<host>:8765"
+  ],
+  "allowed_origins": [
+    "http://127.0.0.1:*",
+    "http://localhost:*",
+    "http://<host>:8765"
+  ]
+}

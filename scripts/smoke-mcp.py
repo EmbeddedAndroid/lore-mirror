@@ -13,7 +13,7 @@ from mcp.client.streamable_http import streamablehttp_client
 ROOT = Path(__file__).resolve().parents[1]
 
 
-async def smoke(url):
+async def smoke(url, bootstrap=False):
     fixture = json.loads((ROOT / 'tests/fixtures/real-pilot/manifest.json').read_text())['messages'][1]
     mid = fixture['message_id']
     results = []
@@ -46,11 +46,24 @@ async def smoke(url):
             status = await call('mail.status')
             assert status['backend']['native_query_syntax']
             assert status['backend']['index_exists']
-            assert status['freshness']['stale'] is False
-            lists = await call('mail.list_lists')
-            assert {row['id'] for row in lists['items']} == {'devicetree-spec', 'u-boot-amlogic'}
+            if not bootstrap:
+                assert status['freshness']['stale'] is False
+            rows = []
+            arguments = {'limit': 20}
+            while True:
+                lists = await call('mail.list_lists', arguments)
+                rows.extend(lists['items'])
+                if not lists['has_more']:
+                    break
+                arguments['cursor'] = lists['next_cursor']
+            expected_lists = {'devicetree-spec', 'u-boot-amlogic'}
+            if bootstrap:
+                assert status['list_count'] == len(rows)
+                assert expected_lists <= {row['id'] for row in rows}
+            else:
+                assert {row['id'] for row in rows} == expected_lists
             assert all(row['sync']['status'] == 'ready' and row['sync']['message_count'] > 0
-                       for row in lists['items'])
+                       for row in rows if row['id'] in expected_lists)
             search = await call('mail.search', {'query': 'mid:' + mid, 'limit': 5})
             assert any(row['message_id'] == mid for row in search['items'])
             arguments = {'message_id': mid, 'part': 'raw', 'limit': 1024}
@@ -97,4 +110,6 @@ async def smoke(url):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--url', default='http://127.0.0.1:8765/mcp')
-    asyncio.run(smoke(parser.parse_args().url))
+    parser.add_argument('--bootstrap', action='store_true')
+    args = parser.parse_args()
+    asyncio.run(smoke(args.url, args.bootstrap))

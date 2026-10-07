@@ -49,6 +49,9 @@ RUN groupadd --gid 10001 mirror && useradd --uid 10001 --gid 10001 --home-dir /r
     chown -R mirror:mirror /data /issues /runtime && chmod 0700 /runtime/run
 USER 10001:10001
 RUN perl -MPublicInbox::LEI -e 1 && python -m pip check
+ARG LORE_BUILD_FINGERPRINT=development
+ENV LORE_BUILD_FINGERPRINT=$LORE_BUILD_FINGERPRINT
+LABEL org.opencontainers.image.version=$LORE_BUILD_FINGERPRINT
 EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python /app/scripts/healthcheck.py api

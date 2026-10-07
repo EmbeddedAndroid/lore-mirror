@@ -1,0 +1,31 @@
+services:
+  api:
+    image: lore-mirror:deploy-63
+    build:
+      args:
+        LORE_BUILD_FINGERPRINT: ${LORE_BUILD_FINGERPRINT:?Set a unique build fingerprint}
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=128m,uid=10001,gid=10001,mode=1770
+      - /runtime:rw,nosuid,noexec,size=64m,uid=10001,gid=10001,mode=0700
+  sync:
+    image: lore-mirror:deploy-63
+    mem_limit: 2304m
+    memswap_limit: 2304m
+    cpus: 2
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=128m,uid=10001,gid=10001,mode=1770
+      - /runtime:rw,nosuid,noexec,size=64m,uid=10001,gid=10001,mode=0700
+  gateway:
+    image: lore-mirror:deploy-63
+    memswap_limit: 64m
+    ports: !override
+      - "<host>:${LORE_PORT:-8765}:8765"
+    depends_on:
+      api:
+        condition: service_started
+  test:
+    image: lore-mirror:deploy-63
+    memswap_limit: 2g

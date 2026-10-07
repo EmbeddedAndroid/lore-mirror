@@ -344,6 +344,9 @@ def prepare_config(path):
         raise SyncError("archive concurrency must be between one and two")
     if config["min_free_fraction"] < .30 or config["min_free_fraction"] >= 1:
         raise SyncError("pilot requires at least 30% free-space headroom")
+    config.setdefault("index_batch_size", "16m")
+    if not re.fullmatch(r"[1-9][0-9]*[kmg]?", str(config["index_batch_size"])):
+        raise SyncError("invalid index_batch_size")
     for item in config["lists"]:
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.+-]*", item["id"]):
             raise SyncError("invalid list id")
@@ -354,7 +357,7 @@ def prepare_config(path):
     return config
 
 
-def _sync_once_locked(config):
+def _sync_once_locked(config, index_lock):
     root = Path(config["data_dir"])
     root.mkdir(parents=True, exist_ok=True)
     (root / "state").mkdir(exist_ok=True)
@@ -363,7 +366,7 @@ def _sync_once_locked(config):
     state["cycle_started_at"] = utcnow()
     state["status"] = "syncing"
     state["stage"] = "syncing"
-    state["updating"] = True
+    state["updating"] = any(r.get("index_dirty") for r in state["lists"].values())
     state.setdefault("generation", 0)
     atomic_json(state_path, state)
     manifest = fetch_manifest(config, state)
@@ -463,37 +466,47 @@ def _sync_once_locked(config):
             needed_for_index = max(256 * 1024**2, int(input_bytes * max(1, multiplier - 1)))
             if storage_available(root, config["min_free_fraction"]) < needed_for_index:
                 raise SyncError(f"index storage preflight requires {needed_for_index} additional bytes while preserving 30% headroom")
-            run_command([_tool(config, "public-inbox-init"), "-V2", "-Lbasic", "-j1", "--ng=" + item["newsgroup"],
-                ident, item["inbox_path"], "https://lore.kernel.org/" + item.get("canonical_id", ident) + "/",
-                item.get("address", ident + "@lists.linux.dev")], config, root / "logs" / f"init-{ident}.log", env=env)
-            row["basic_index"] = run_command([_tool(config, "public-inbox-index"), "-j1", "--no-multi-pack-index",
-                item["inbox_path"]], config, root / "logs" / f"basic-{ident}.log", env=env)
-            row["index_dirty"] = True
-            state["unsafe_index"] = True
-            atomic_json(state_path, state)
-            row["extindex"] = run_command([_tool(config, "public-inbox-extindex"), "-j1", "--batch-size=16m",
-                "--no-multi-pack-index", config["extindex"], item["inbox_path"]], config, root / "logs" / f"extindex-{ident}.log", env=env)
-            git = tree_bytes(Path(item["inbox_path"]) / "git")
-            full = tree_bytes(item["inbox_path"])
-            count = message_count(item["inbox_path"])
-            ext = tree_bytes(config["extindex"])
-            if row.get("measurements") and row.get("indexed_at"):
+            fcntl.flock(index_lock, fcntl.LOCK_EX)
+            try:
+                row["index_dirty"] = True
+                state.update(updating=True, unsafe_index=True, stage="indexing")
+                atomic_json(state_path, state)
+                run_command([_tool(config, "public-inbox-init"), "-V2", "-Lbasic", "-j1", "--ng=" + item["newsgroup"],
+                    ident, item["inbox_path"], "https://lore.kernel.org/" + item.get("canonical_id", ident) + "/",
+                    item.get("address", ident + "@lists.linux.dev")], config, root / "logs" / f"init-{ident}.log", env=env)
+                row["basic_index"] = run_command([_tool(config, "public-inbox-index"), "-j1", "--batch-size=" + config["index_batch_size"], "--no-multi-pack-index",
+                    item["inbox_path"]], config, root / "logs" / f"basic-{ident}.log", env=env)
+                row["extindex"] = run_command([_tool(config, "public-inbox-extindex"), "-j1", "--batch-size=" + config["index_batch_size"],
+                    "--no-multi-pack-index", config["extindex"], item["inbox_path"]], config, root / "logs" / f"extindex-{ident}.log", env=env)
+                git = tree_bytes(Path(item["inbox_path"]) / "git")
+                full = tree_bytes(item["inbox_path"])
+                count = message_count(item["inbox_path"])
+                ext = tree_bytes(config["extindex"])
+                if row.get("measurements") and row.get("indexed_at"):
+                    row.setdefault("initial_measurements", row["measurements"])
+                    row.setdefault("initial_indexed_at", row["indexed_at"])
+                row["measurements"] = {"git_bytes": git, "basic_index_bytes": {
+                    key: full[key] - git[key] for key in git}, "shared_extindex_total_bytes": ext,
+                    "messages": count, "date_bounds": date_bounds(item["inbox_path"]), "index_seconds": row["basic_index"]["seconds"] + row["extindex"]["seconds"],
+                    "extindex_increment_bytes": ext["allocated"] - previous_index,
+                    "peak_aggregate_rss_bytes_sampled": max(row[step]["peak_aggregate_rss_bytes_sampled"] for step in ("fetch", "basic_index", "extindex"))}
                 row.setdefault("initial_measurements", row["measurements"])
-                row.setdefault("initial_indexed_at", row["indexed_at"])
-            row["measurements"] = {"git_bytes": git, "basic_index_bytes": {
-                key: full[key] - git[key] for key in git}, "shared_extindex_total_bytes": ext,
-                "messages": count, "date_bounds": date_bounds(item["inbox_path"]), "index_seconds": row["basic_index"]["seconds"] + row["extindex"]["seconds"],
-                "extindex_increment_bytes": ext["allocated"] - previous_index,
-                "peak_aggregate_rss_bytes_sampled": max(row[step]["peak_aggregate_rss_bytes_sampled"] for step in ("fetch", "basic_index", "extindex"))}
-            row.setdefault("initial_measurements", row["measurements"])
-            row.setdefault("initial_indexed_at", utcnow())
-            row["hourly_delta"] = {"git_bytes": git["allocated"] - previous_git,
-                "index_bytes": ext["allocated"] - previous_index, "messages": count - previous_count,
-                "checked_at": utcnow(), "bootstrap": not bool(row.get("indexed_at")),
-                "elapsed_observation_seconds": elapsed_observation,
-                "is_hourly_observation": bool(row.get("indexed_at")) and elapsed_observation is not None and elapsed_observation >= 3590,
-                "note": ("bootstrap deltas are not hourly growth estimates" if not row.get("indexed_at") else "Local incremental change; catch-up and backfills may affect this observation.")}
-            row.update(status="ready", index_dirty=False, indexed_at=utcnow(), indexed_fingerprints=fingerprints, retry_count=0)
+                row.setdefault("initial_indexed_at", utcnow())
+                row["hourly_delta"] = {"git_bytes": git["allocated"] - previous_git,
+                    "index_bytes": ext["allocated"] - previous_index, "messages": count - previous_count,
+                    "checked_at": utcnow(), "bootstrap": not bool(row.get("indexed_at")),
+                    "elapsed_observation_seconds": elapsed_observation,
+                    "is_hourly_observation": bool(row.get("indexed_at")) and elapsed_observation is not None and elapsed_observation >= 3590,
+                    "note": ("bootstrap deltas are not hourly growth estimates" if not row.get("indexed_at") else "Local incremental change; catch-up and backfills may affect this observation.")}
+                row.update(status="ready", index_dirty=False, indexed_at=utcnow(), indexed_fingerprints=fingerprints, retry_count=0)
+                state["generation"] += 1
+                state["last_indexed_at"] = row["indexed_at"]
+            finally:
+                state["unsafe_index"] = any(r.get("index_dirty") for r in state["lists"].values())
+                state.update(updating=state["unsafe_index"], stage="syncing")
+                atomic_json(state_path, state)
+                fcntl.flock(index_lock, fcntl.LOCK_UN)
+
         except Exception as exc:
             row.update(status="blocked" if "storage" in str(exc) or "capacity" in str(exc) else "error",
                 last_error=str(exc), retry_count=row.get("retry_count", 0) + 1,
@@ -505,9 +518,6 @@ def _sync_once_locked(config):
     state.update(status="partial" if errors else "ready", updating=any(r.get("index_dirty") for r in state["lists"].values()), cycle_finished_at=utcnow(),
         extindex_bytes=tree_bytes(config["extindex"]), disk_free_bytes=shutil.disk_usage(root).free,
         pending_lists=errors, next_run_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
-    if any(r.get("indexed_at", "") >= state["cycle_started_at"] for r in state["lists"].values()):
-        state["generation"] = state.get("generation", 0) + 1
-        state["last_indexed_at"] = state["cycle_finished_at"]
     if state["status"] == "ready" and not state["unsafe_index"]:
         state["last_success"] = state["cycle_finished_at"]
         state.pop("last_error", None)
@@ -529,8 +539,7 @@ def sync_once(config):
     root = Path(config["data_dir"])
     root.mkdir(parents=True, exist_ok=True)
     with (root / "index.lock").open("a") as index_lock:
-        fcntl.flock(index_lock, fcntl.LOCK_EX)
-        return _sync_once_locked(config)
+        return _sync_once_locked(config, index_lock)
 
 
 def run_sync(config_path, once=True):
