@@ -242,6 +242,36 @@ class NativePublicInboxE2ETests(unittest.TestCase):
                 self.assertTrue(pages[0]["coverage"]["native_query_syntax"])
                 self.assertEqual(pages[0]["count_kind"], "exact_within_local_scope")
 
+    def test_search_while_the_sync_worker_holds_every_index_write_lock(self):
+        import fcntl
+        import threading
+        # A public-inbox writer holds inbox.lock and ei.lock for its whole
+        # run, and open.lock exclusively only around each commit (readers
+        # take it shared), so a commit is mimicked by holding open.lock for
+        # one second while the search starts.
+        writer = [self.root / "index.lock", self.extindex / "ei.lock",
+                  self.inbox / "inbox.lock"]
+        commit = self.extindex / "open.lock"
+        state = self.root / "sync-state.json"
+        with ExitStack() as held:
+            for path in writer + [commit]:
+                self.assertTrue(path == self.root / "index.lock" or path.exists(), path)
+                path.touch(exist_ok=True)
+                fd = held.enter_context(path.open("rb"))
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if path == commit:
+                    commit_fd = fd
+            state.write_text(json.dumps({"generation": 1, "updating": True,
+                                         "unsafe_index": True, "stage": "indexing"}))
+            held.callback(state.unlink, missing_ok=True)
+            release = threading.Timer(1.0, fcntl.flock, (commit_fd, fcntl.LOCK_UN))
+            release.start()
+            held.callback(release.cancel)
+            query = GOLDEN["searches"][0]
+            rows, _ = self.page_all("mail.search", query["arguments"])
+            self.assertEqual([row["message_id"] for row in rows], query["expected_message_ids"])
+            self.assertTrue(self.service.invoke("mail.status")["sync"]["updating"])
+
     def test_exact_message_raw_body_headers_and_variant_paging(self):
         for fixture, expected in zip(MANIFEST["messages"], GOLDEN["messages"], strict=True):
             with self.subTest(message_id=fixture["message_id"]):

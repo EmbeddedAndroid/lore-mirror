@@ -261,15 +261,27 @@ class HTTPBoundaryTests(unittest.TestCase):
         finally:
             state.unlink(missing_ok=True)
 
-    def test_incomplete_index_blocks_reads_but_status_remains_available(self):
+    def test_reads_continue_while_indexing_and_status_reports_it(self):
         state=self.mail_dir / "sync-state.json"
         try:
             for flags in ({"updating":True},{"unsafe_index":True,"updating":False}):
                 state.write_text(json.dumps(flags))
                 response=self.post("mail.search",{"query":"Independent","limit":1})
-                self.assertEqual(response.status_code,503,response.text)
+                self.assertEqual(response.status_code,200,response.text)
                 status=self.post("mail.status",{})
                 self.assertEqual(status.status_code,200,status.text)
+                sync=self.result(status)["sync"]
+                self.assertEqual({k:sync.get(k) for k in flags},flags)
+        finally:
+            state.unlink(missing_ok=True)
+
+    def test_unreadable_checkpoint_blocks_reads(self):
+        state=self.mail_dir / "sync-state.json"
+        try:
+            state.write_text("{not json")
+            response=self.post("mail.search",{"query":"Independent","limit":1})
+            self.assertEqual(response.status_code,503,response.text)
+            self.assertEqual(response.json()["error"]["code"],"index_state_invalid")
         finally:
             state.unlink(missing_ok=True)
 

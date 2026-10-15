@@ -47,11 +47,12 @@ The default laptop Compose configuration remains localhost-only and small.
 Public-inbox retains default fsync durability. Initial selection contains all
 manifest epochs with no date/shallow filters. The two existing small inboxes
 are indexed first as end-to-end probes; every remaining inbox stays selected.
-Index writes hold the API read barrier per inbox; completed checkpoints are
-readable during subsequent Git downloads. Each completed inbox advances the
-pagination generation. Interrupted basic/shared writes retain the unsafe flag
-until recovery, even if a later inbox succeeds. Health and status remain
-available during indexing, while mail reads return index_updating.
+Mail reads do not wait for index writes: they see the last committed index
+batch, so completed inboxes stay searchable while later ones download and
+index, and an inbox being indexed returns what has been committed so far. Each
+completed inbox advances the pagination generation. Interrupted basic/shared
+writes retain the unsafe flag until recovery, even if a later inbox succeeds;
+status reports it.
 
 The host-only override publishes `<host>:8765` for the explicitly
 requested LAN HTTP MCP endpoint. It is unauthenticated and confined to this

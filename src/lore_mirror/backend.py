@@ -93,6 +93,12 @@ def _base_env(cfg):
     return env
 
 
+# A writer commit can replace the Xapian revision or hold the SQLite write
+# lock while a reader opens them; both clear within one commit.
+TRANSIENT = re.compile(r"DatabaseModified|DatabaseOpeningError|database is locked|SQLITE_BUSY")
+TRANSIENT_ATTEMPTS = 4
+
+
 class PublicInboxBackend:
     def __init__(self, cfg):
         self.cfg, self.limits = cfg, cfg["limits"]
@@ -101,9 +107,17 @@ class PublicInboxBackend:
         self.native_syntax = True
 
     def _run(self, argv, inp=b"", max_bytes=None):
-        return bounded_run(argv, input_bytes=inp, env=self.env,
-                           timeout=self.limits["query_timeout"],
-                           max_bytes=max_bytes or self.limits["query_output_bytes"])
+        for attempt in range(TRANSIENT_ATTEMPTS):
+            try:
+                return bounded_run(argv, input_bytes=inp, env=self.env,
+                                   timeout=self.limits["query_timeout"],
+                                   max_bytes=max_bytes or self.limits["query_output_bytes"])
+            except MirrorError as exc:
+                if exc.code != "backend_error" or not TRANSIENT.search(exc.message):
+                    raise
+                if attempt == TRANSIENT_ATTEMPTS - 1:
+                    raise MirrorError("index_busy", "Index commit in progress; retry shortly", 503) from exc
+                time.sleep(0.2 * (attempt + 1))
 
     def search(self, query, limit, thread_id=None, list_ids=None):
         if list_ids is not None and not list_ids:return [],False

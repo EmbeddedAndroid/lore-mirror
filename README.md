@@ -237,8 +237,10 @@ docker compose up -d --wait sync
 ```
 
 An unchanged manifest completes without Git/index work. Changed fingerprints
-update existing epochs incrementally. Index updates briefly block mail reads;
-clients receive `index_updating` and should retry. `docker compose down` preserves
+update existing epochs incrementally. Mail reads continue during index updates
+and see the last committed index batch: a list being indexed returns what has
+been committed so far. A read that meets a commit in progress is retried; if it
+still fails, clients receive `index_busy` and should retry. `docker compose down` preserves
 named volumes, as do image rebuilds. `docker compose down --volumes` deletes them.
 
 ### Backup and restore

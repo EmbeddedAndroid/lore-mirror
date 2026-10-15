@@ -6,7 +6,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from lore_mirror.errors import MirrorError
 from lore_mirror.service import MirrorService
 from lore_mirror.sync import SyncError, prepare_config, sync_once
 
@@ -35,9 +34,8 @@ class BootstrapCheckpointTests(unittest.TestCase):
                         state = json.loads((root / 'sync-state.json').read_text())
                         if fail:
                             self.assertTrue(state['unsafe_index'])
-                            with self.assertRaises(MirrorError):
-                                with service.read_guard():
-                                    pass
+                            with service.read_guard():
+                                pass
                         else:
                             self.assertEqual(state['generation'], 1)
                             self.assertEqual(state['lists']['first']['status'], 'ready')
@@ -49,6 +47,9 @@ class BootstrapCheckpointTests(unittest.TestCase):
                             fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
                     state = json.loads((root / 'sync-state.json').read_text())
                     self.assertTrue(state['updating'])
+                    # Reads do not wait for the writer's exclusive lock.
+                    with service.read_guard():
+                        pass
                     if argv[0] == fail and 'first' in str(log):
                         raise SyncError('native indexing interrupted')
                 return {'seconds': .1, 'peak_aggregate_rss_bytes_sampled': 100, 'returncode': 0}

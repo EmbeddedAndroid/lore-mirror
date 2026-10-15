@@ -2,7 +2,6 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager
 import datetime as dt
-import fcntl
 import hashlib
 import hmac
 import json
@@ -66,28 +65,16 @@ class MirrorService:
 
     @contextmanager
     def read_guard(self):
-        lock=Path(self.cfg["data_dir"])/"index.lock"
-        fd=None; started=time.monotonic()
-        try:
-            if lock.exists():
-                fd=lock.open("rb")
-                while True:
-                    try:
-                        fcntl.flock(fd,fcntl.LOCK_SH|fcntl.LOCK_NB); break
-                    except BlockingIOError:
-                        if time.monotonic()-started>2:
-                            raise MirrorError("index_updating","Index update in progress; retry shortly",503)
-                        time.sleep(0.025)
-            state=Path(self.cfg["data_dir"])/"sync-state.json"
-            if state.exists():
-                try: info=json.loads(state.read_text())
-                except (OSError,ValueError): raise MirrorError("index_state_invalid","Cannot validate the current index checkpoint",503)
-                if info.get("updating") or info.get("unsafe_index"):
-                    raise MirrorError("index_updating","Index batch is incomplete; retry after recovery",503)
-            yield
-        finally:
-            if fd is not None:
-                fcntl.flock(fd,fcntl.LOCK_UN); fd.close()
+        # Reads never wait for the sync worker. public-inbox commits each index
+        # batch atomically (Xapian revisions, SQLite transactions), so a reader
+        # sees the last committed batch while a list is being indexed; the
+        # backend retries the brief window in which a commit replaces the
+        # revision it opened. Only an unreadable checkpoint stops reads.
+        state=Path(self.cfg["data_dir"])/"sync-state.json"
+        if state.exists():
+            try: json.loads(state.read_text())
+            except (OSError,ValueError): raise MirrorError("index_state_invalid","Cannot validate the current index checkpoint",503)
+        yield
 
     def invoke(self,name,arguments=_UNSET):
         if name not in self.tools: raise MirrorError("unknown_tool","Unknown tool",404)
