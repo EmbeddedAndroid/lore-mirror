@@ -328,6 +328,9 @@ def prepare_config(path):
     config.setdefault("upstream", "https://erol.kernel.org")
     config.setdefault("manifest_url", config["upstream"].rstrip("/") + "/manifest.js.gz")
     config.setdefault("interval_seconds", 3600)
+    config.setdefault("retry_seconds", [60, 120, 300, 900])
+    config.setdefault("priority_lists", [])
+    config.setdefault("priority_interval_seconds", 300)
     config.setdefault("max_workers", 2)
     config.setdefault("min_free_fraction", .30)
     config.setdefault("user_agent", "lore-mirror/0.1 (bounded archive mirror)")
@@ -347,6 +350,13 @@ def prepare_config(path):
     config.setdefault("index_batch_size", "16m")
     if not re.fullmatch(r"[1-9][0-9]*[kmg]?", str(config["index_batch_size"])):
         raise SyncError("invalid index_batch_size")
+    unknown = set(config["priority_lists"]) - set(ids)
+    if unknown:
+        raise SyncError("priority_lists names unselected inboxes: " + ", ".join(sorted(unknown)))
+    if not 60 <= config["priority_interval_seconds"] <= config["interval_seconds"]:
+        raise SyncError("priority_interval_seconds must be between 60 and interval_seconds")
+    if not config["retry_seconds"] or any(not 1 <= x <= config["interval_seconds"] for x in config["retry_seconds"]):
+        raise SyncError("retry_seconds must be 1 to interval_seconds")
     for item in config["lists"]:
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.+-]*", item["id"]):
             raise SyncError("invalid list id")
@@ -542,6 +552,25 @@ def sync_once(config):
         return _sync_once_locked(config, index_lock)
 
 
+def cycle_is_full(config, last_full_started, now):
+    if not config["priority_lists"] or last_full_started is None:
+        return True
+    return now - last_full_started >= config["interval_seconds"]
+
+
+def next_delay(config, consecutive_errors, last_full_started, now):
+    """Seconds to sleep after a cycle: back off on errors, else wake for the next due cycle."""
+    if consecutive_errors:
+        retries = config["retry_seconds"]
+        return min(retries[min(consecutive_errors, len(retries)) - 1], config["interval_seconds"])
+    if not config["priority_lists"]:
+        return config["interval_seconds"]
+    # Full cycles are paced start to start; a full pass longer than the interval
+    # still leaves one priority interval before the next pass.
+    until_full = config["interval_seconds"] - (now - last_full_started)
+    return max(60, min(config["priority_interval_seconds"], until_full))
+
+
 def run_sync(config_path, once=True):
     # A stopped coordinator must not leave an orphan writer that outlives flock.
     import threading
@@ -564,19 +593,25 @@ def run_sync(config_path, once=True):
                 "scope": [item["id"] for item in config["lists"]], "cycles_completed": 0,
                 "persistence": "Current workspace process; survival after workspace termination is not guaranteed."}
             atomic_json(root / "daemon-state.json", daemon)
+        consecutive_errors = 0
+        last_full_started = None
         try:
             while True:
+                full = cycle_is_full(config, last_full_started, time.time())
+                cycle_config = config if full else dict(config, lists=[item for item in config["lists"] if item["id"] in config["priority_lists"]])
+                if full:
+                    last_full_started = time.time()
                 if daemon:
                     daemon.update(status="syncing", cycle_started_at=utcnow())
                     atomic_json(root / "daemon-state.json", daemon)
                 try:
-                    state = sync_once(config)
+                    state = sync_once(cycle_config)
                 except Exception as exc:
                     state_path = root / "sync-state.json"
                     state = json.loads(state_path.read_text()) if state_path.exists() else {"lists": {}}
                     state["unsafe_index"] = any(r.get("index_dirty") for r in state.get("lists", {}).values())
                     state.update(status="error", updating=any(r.get("index_dirty") for r in state.get("lists", {}).values()), last_error=str(exc),
-                        cycle_finished_at=utcnow(), pending_lists=[r["id"] for r in config["lists"]])
+                        cycle_finished_at=utcnow(), pending_lists=[r["id"] for r in cycle_config["lists"]])
                     atomic_json(state_path, state)
                     if once:
                         raise
@@ -584,15 +619,17 @@ def run_sync(config_path, once=True):
                     "finished_at": state["cycle_finished_at"]}), flush=True)
                 if once:
                     return state
-                daemon.update(status="sleeping", last_cycle_status=state["status"],
-                    cycles_completed=daemon["cycles_completed"] + 1,
+                consecutive_errors = consecutive_errors + 1 if state["status"] == "error" else 0
+                delay = next_delay(config, consecutive_errors, last_full_started, time.time())
+                daemon.update(status="sleeping", last_cycle_status=state["status"], last_cycle_scope="full" if full else "priority",
+                    cycles_completed=daemon["cycles_completed"] + 1, consecutive_errors=consecutive_errors,
                     last_cycle_finished_at=state["cycle_finished_at"],
-                    next_scheduled_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
+                    next_scheduled_at=dt.datetime.fromtimestamp(time.time() + delay, dt.timezone.utc).isoformat())
                 if state["status"] == "ready" and not state.get("unsafe_index"):
                     daemon.setdefault("first_successful_cycle_at", state["cycle_finished_at"])
                     daemon["last_successful_cycle_at"] = state["cycle_finished_at"]
                 atomic_json(root / "daemon-state.json", daemon)
-                time.sleep(config["interval_seconds"])
+                time.sleep(delay)
         finally:
             if daemon:
                 daemon.update(status="stopped", stopped_at=utcnow())

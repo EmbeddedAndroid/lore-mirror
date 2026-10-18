@@ -158,6 +158,62 @@ class SyncSafetyTests(unittest.TestCase):
             self.assertTrue(status['next_scheduled_at'])
             self.assertEqual(status['scope'], ['test'])
 
+    def _run_daemon_cycles(self, cfg_dict, results, cycles):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = root / 'config.json'
+            cfg.write_text(json.dumps(dict(cfg_dict, data_dir=tmp)))
+            sleeps, scopes = [], []
+            def fake_sync(config):
+                scopes.append([item['id'] for item in config['lists']])
+                result = results[len(scopes) - 1]
+                if isinstance(result, Exception):
+                    raise result
+                return result
+            def fake_sleep(seconds):
+                sleeps.append(seconds)
+                if len(sleeps) >= cycles:
+                    raise KeyboardInterrupt
+            with mock.patch('lore_mirror.sync.sync_once', side_effect=fake_sync), \
+                 mock.patch('lore_mirror.sync.signal.signal'), \
+                 mock.patch('lore_mirror.sync.time.sleep', side_effect=fake_sleep), \
+                 mock.patch('builtins.print'):
+                with self.assertRaises(KeyboardInterrupt):
+                    run_sync(cfg, once=False)
+            return sleeps, scopes, json.loads((root / 'daemon-state.json').read_text())
+
+    def test_daemon_retries_quickly_after_errors_and_resets_on_success(self):
+        ok = {'status': 'ready', 'pending_lists': [], 'unsafe_index': False,
+            'cycle_finished_at': '2026-01-01T00:00:00+00:00'}
+        dns = OSError('<urlopen error [Errno -3] Temporary failure in name resolution>')
+        sleeps, _, status = self._run_daemon_cycles({'lists': [{'id': 'test'}], 'interval_seconds': 3600},
+            [dns, dns, dns, dns, dns, ok], 6)
+        self.assertEqual(sleeps, [60, 120, 300, 900, 900, 3600])
+        self.assertEqual(status['consecutive_errors'], 0)
+
+    def test_daemon_runs_priority_lists_between_full_cycles(self):
+        ok = {'status': 'ready', 'pending_lists': [], 'unsafe_index': False,
+            'cycle_finished_at': '2026-01-01T00:00:00+00:00'}
+        cfg = {'lists': [{'id': 'u-boot'}, {'id': 'op-tee'}, {'id': 'lkml'}], 'interval_seconds': 3600,
+            'priority_lists': ['u-boot', 'op-tee'], 'priority_interval_seconds': 300}
+        clock = iter(range(0, 10**6, 300))
+        with mock.patch('lore_mirror.sync.time.time', side_effect=lambda: next(clock)):
+            sleeps, scopes, status = self._run_daemon_cycles(cfg, [ok] * 3, 3)
+        self.assertEqual(scopes[0], ['u-boot', 'op-tee', 'lkml'])
+        self.assertEqual(scopes[1], ['u-boot', 'op-tee'])
+        self.assertTrue(all(60 <= x <= 300 for x in sleeps))
+        self.assertEqual(status['last_cycle_scope'], 'priority')
+
+    def test_priority_config_is_validated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for extra in ({'priority_lists': ['nope']}, {'priority_lists': ['test'], 'priority_interval_seconds': 10},
+                    {'retry_seconds': []}, {'retry_seconds': [0]}):
+                cfg = Path(tmp) / 'c.json'
+                cfg.write_text(json.dumps(dict({'data_dir': tmp, 'lists': [{'id': 'test'}], 'interval_seconds': 3600,
+                    'upstream': 'https://erol.kernel.org'}, **extra)))
+                with self.assertRaises(SyncError, msg=str(extra)):
+                    prepare_config(cfg)
+
     def test_long_cold_index_is_not_mislabeled_hourly_observation(self):
         import datetime as dt
         with tempfile.TemporaryDirectory() as tmp:

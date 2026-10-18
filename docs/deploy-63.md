@@ -66,6 +66,22 @@ Upstream policy: use [the kernel.org administrator's mirror recipe](https://peop
 with erol and two pull workers. public-inbox-clone handles Git replication.
 No lore web searches, message downloads or web scraping are used.
 
+## Scheduling and restart recovery
+
+The sync daemon starts a full pass over every selected inbox once per
+`interval_seconds` (3600, start to start). Between full passes it refreshes
+`priority_lists` every `priority_interval_seconds` (300), so replies on those
+lists become searchable within minutes of reaching lore. A full pass that runs
+longer than the interval is followed by one priority pass before the next
+full pass; priority lists are not refreshed while a long full pass runs.
+
+After a failed cycle (for example DNS not yet up after a power cut) the daemon
+retries after `retry_seconds` (60, 120, 300, then 900 s), capped at the
+interval, and returns to the normal schedule after the first good cycle.
+Containers restart with Docker (`unless-stopped`). An inbox interrupted while
+indexing keeps `index_dirty` and is indexed again on the next cycle that
+includes it; status reports `unsafe_index` until then.
+
 ## Monitoring and recovery
 
 ```sh
