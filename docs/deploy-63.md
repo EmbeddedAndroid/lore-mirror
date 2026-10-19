@@ -70,17 +70,32 @@ No lore web searches, message downloads or web scraping are used.
 
 The sync daemon starts a full pass over every selected inbox once per
 `interval_seconds` (3600, start to start). Between full passes it refreshes
-`priority_lists` every `priority_interval_seconds` (300), so replies on those
-lists become searchable within minutes of reaching lore. A full pass that runs
-longer than the interval is followed by one priority pass before the next
-full pass; priority lists are not refreshed while a long full pass runs.
+`priority_lists` every `priority_interval_seconds` (300). During a full pass,
+the daemon also checks that interval after each inbox and, when due, checks a
+fresh manifest and refreshes priority inboxes before resuming the pass. Only
+inboxes with a completed first index (`indexed_at` set and `index_dirty` clear)
+are eligible for priority refreshes. Unindexed or interrupted inboxes wait for
+their full-pass turn. A single long clone or index can delay a refresh until
+that job's inbox finishes; refreshes do not run concurrently with full-pass work.
+Full passes keep their start-to-start schedule, with a short pause if overdue.
+
+Both `daemon-state.json` and `sync-state.json` record `last_priority_refresh_at`
+and `last_priority_refresh_status` as soon as a priority attempt finishes, even
+while a full pass is still running. The timestamp includes failed attempts;
+`partial` means at least one eligible inbox failed. The saved timestamp is reused
+after restart. `next_priority_refresh_at` and `priority_consecutive_errors` in
+sync state preserve the due time and backoff across full-pass and restart
+boundaries. Priority errors are recorded on the affected inbox rows and do not
+abort the full pass. Due checks use `retry_seconds` after priority errors, and
+return to the priority interval after a successful attempt.
 
 After a failed cycle (for example DNS not yet up after a power cut) the daemon
 retries after `retry_seconds` (60, 120, 300, then 900 s), capped at the
 interval, and returns to the normal schedule after the first good cycle.
 Containers restart with Docker (`unless-stopped`). An inbox interrupted while
-indexing keeps `index_dirty` and is indexed again on the next cycle that
-includes it; status reports `unsafe_index` until then.
+indexing keeps `index_dirty` and is indexed again at its next full-pass turn;
+status reports `unsafe_index` until then. Priority work uses the same index lock,
+per-inbox checkpoints, and storage guards as ordinary full-pass work.
 
 ## Monitoring and recovery
 

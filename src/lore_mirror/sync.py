@@ -367,7 +367,7 @@ def prepare_config(path):
     return config
 
 
-def _sync_once_locked(config, index_lock):
+def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
     root = Path(config["data_dir"])
     root.mkdir(parents=True, exist_ok=True)
     (root / "state").mkdir(exist_ok=True)
@@ -378,8 +378,12 @@ def _sync_once_locked(config, index_lock):
     state["stage"] = "syncing"
     state["updating"] = any(r.get("index_dirty") for r in state["lists"].values())
     state.setdefault("generation", 0)
+    state.setdefault("last_priority_refresh_at", None)
+    last_priority_refresh = (dt.datetime.fromisoformat(state["last_priority_refresh_at"]).timestamp()
+        if state["last_priority_refresh_at"] else time.time())
+    priority_errors = state.get("priority_consecutive_errors", 0)
     atomic_json(state_path, state)
-    manifest = fetch_manifest(config, state)
+    manifest = fetch_manifest(config, state) if full else None
     env = dict(os.environ)
     for key, value in config.get("sync_env", config.get("query_env", {})).items():
         if key not in {"PATH", "PERL5LIB", "LD_LIBRARY_PATH", "PERL_INLINE_DIRECTORY", "PERL5OPT"}:
@@ -405,16 +409,23 @@ def _sync_once_locked(config, index_lock):
     curl_home.mkdir(exist_ok=True)
     (curl_home / ".curlrc").write_text("user-agent = " + json.dumps(config["user_agent"]) + "\n")
     env["CURL_HOME"] = str(curl_home)
-    errors = []
-    # Small lists first provide an end-to-end measurement before admitting large lists.
-    for item in sorted(config["lists"], key=lambda x: x.get("size_class", x.get("class")) != "small"):
+    errors = set()
+
+    def record_error(ident, exc):
+        row = state["lists"].setdefault(ident, {})
+        row.update(status="blocked" if "storage" in str(exc) or "capacity" in str(exc) else "error",
+            last_error=str(exc), retry_count=row.get("retry_count", 0) + 1,
+            next_retry_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
+        errors.add(ident)
+
+    def sync_list(item, manifest):
         ident = item["id"]
         row = state["lists"].setdefault(ident, {})
         epochs = sorted(k for k in manifest if k.split("/")[1] == ident)
         if not epochs:
             row.update(status="blocked", last_error="namespace absent from validated manifest")
-            errors.append(ident)
-            continue
+            errors.add(ident)
+            return
         fingerprints = {k: manifest[k].get("fingerprint") for k in epochs}
         row["upstream_epochs"] = fingerprints
         # A long cold index is not an hourly observation. Begin from the
@@ -423,14 +434,15 @@ def _sync_once_locked(config, index_lock):
         elapsed_observation = time.time() - max(previous_points) if previous_points else None
         row["checked_at"] = utcnow()
         # Retry interrupted work even when upstream did not change.
-        if row.get("status") == "ready" and row.get("indexed_fingerprints") == fingerprints:
+        if row.get("status") == "ready" and not row.get("index_dirty") and row.get("indexed_fingerprints") == fingerprints:
             row["hourly_delta"] = {"checked_at": utcnow(), "changed": False, "git_bytes": 0,
                 "index_bytes": 0, "messages": 0, "configured_interval_seconds": config["interval_seconds"],
                 "elapsed_observation_seconds": elapsed_observation,
                 "is_hourly_observation": elapsed_observation is not None and elapsed_observation >= 3590,
                 "note": "manifest unchanged; no Git or index work"}
+            errors.discard(ident)
             atomic_json(state_path, state)
-            continue
+            return
         try:
             new_epochs = [epoch for epoch in epochs if epoch not in row.get("indexed_fingerprints", {})] if row.get("indexed_at") else []
             if not row.get("budget") or not row.get("fetched_at"):
@@ -511,6 +523,7 @@ def _sync_once_locked(config, index_lock):
                 row.update(status="ready", index_dirty=False, indexed_at=utcnow(), indexed_fingerprints=fingerprints, retry_count=0)
                 state["generation"] += 1
                 state["last_indexed_at"] = row["indexed_at"]
+                errors.discard(ident)
             finally:
                 state["unsafe_index"] = any(r.get("index_dirty") for r in state["lists"].values())
                 state.update(updating=state["unsafe_index"], stage="syncing")
@@ -518,16 +531,63 @@ def _sync_once_locked(config, index_lock):
                 fcntl.flock(index_lock, fcntl.LOCK_UN)
 
         except Exception as exc:
-            row.update(status="blocked" if "storage" in str(exc) or "capacity" in str(exc) else "error",
-                last_error=str(exc), retry_count=row.get("retry_count", 0) + 1,
-                next_retry_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
-            errors.append(ident)
+            record_error(ident, exc)
         atomic_json(state_path, state)
+
+    def refresh_priority(force=False):
+        nonlocal last_priority_refresh, priority_errors, manifest
+        delay = (next_delay(config, priority_errors, None, time.time()) if priority_errors
+            else config["priority_interval_seconds"])
+        if not force and time.time() - last_priority_refresh < delay:
+            return
+        priority = [item for item in config["lists"] if item["id"] in config["priority_lists"]
+            and state["lists"].get(item["id"], {}).get("indexed_at")
+            and not state["lists"][item["id"]].get("index_dirty")]
+        if not priority:
+            if force:
+                state["next_priority_refresh_at"] = dt.datetime.fromtimestamp(
+                    time.time() + config["priority_interval_seconds"], dt.timezone.utc).isoformat()
+            return
+        try:
+            manifest = fetch_manifest(config, state)
+        except Exception as exc:
+            for item in priority:
+                record_error(item["id"], exc)
+        else:
+            for item in priority:
+                sync_list(item, manifest)
+        failed = any(item["id"] in errors for item in priority)
+        priority_errors = priority_errors + 1 if failed else 0
+        last_priority_refresh = time.time()
+        delay = (next_delay(config, priority_errors, None, last_priority_refresh) if failed
+            else config["priority_interval_seconds"])
+        state.update(last_priority_refresh_at=utcnow(),
+            last_priority_refresh_status="partial" if failed else "ready",
+            priority_consecutive_errors=priority_errors,
+            next_priority_refresh_at=dt.datetime.fromtimestamp(last_priority_refresh + delay, dt.timezone.utc).isoformat())
+        if failed:
+            for item in priority:
+                if item["id"] in errors:
+                    state["lists"][item["id"]]["next_retry_at"] = state["next_priority_refresh_at"]
+        atomic_json(state_path, state)
+        if daemon is not None:
+            daemon.update(last_priority_refresh_at=state["last_priority_refresh_at"],
+                last_priority_refresh_status=state["last_priority_refresh_status"])
+            atomic_json(root / "daemon-state.json", daemon)
+
+    if full:
+        # Small lists first provide an end-to-end measurement before admitting large lists.
+        for item in sorted(config["lists"], key=lambda x: x.get("size_class", x.get("class")) != "small"):
+            sync_list(item, manifest)
+            if config["priority_lists"]:
+                refresh_priority()
+    else:
+        refresh_priority(force=True)
     state["unsafe_index"] = any(r.get("index_dirty") for r in state["lists"].values())
     state["stage"] = "recovery_required" if state["unsafe_index"] else "idle"
     state.update(status="partial" if errors else "ready", updating=any(r.get("index_dirty") for r in state["lists"].values()), cycle_finished_at=utcnow(),
         extindex_bytes=tree_bytes(config["extindex"]), disk_free_bytes=shutil.disk_usage(root).free,
-        pending_lists=errors, next_run_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
+        pending_lists=sorted(errors), next_run_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
     if state["status"] == "ready" and not state["unsafe_index"]:
         state["last_success"] = state["cycle_finished_at"]
         state.pop("last_error", None)
@@ -545,11 +605,11 @@ def _sync_once_locked(config, index_lock):
     return state
 
 
-def sync_once(config):
+def sync_once(config, *, full=True, daemon=None):
     root = Path(config["data_dir"])
     root.mkdir(parents=True, exist_ok=True)
     with (root / "index.lock").open("a") as index_lock:
-        return _sync_once_locked(config, index_lock)
+        return _sync_once_locked(config, index_lock, full=full, daemon=daemon)
 
 
 def cycle_is_full(config, last_full_started, now):
@@ -558,7 +618,7 @@ def cycle_is_full(config, last_full_started, now):
     return now - last_full_started >= config["interval_seconds"]
 
 
-def next_delay(config, consecutive_errors, last_full_started, now):
+def next_delay(config, consecutive_errors, last_full_started, now, *, next_priority_at=None):
     """Seconds to sleep after a cycle: back off on errors, else wake for the next due cycle."""
     if consecutive_errors:
         retries = config["retry_seconds"]
@@ -566,8 +626,10 @@ def next_delay(config, consecutive_errors, last_full_started, now):
     if not config["priority_lists"]:
         return config["interval_seconds"]
     # Full cycles are paced start to start; a full pass longer than the interval
-    # still leaves one priority interval before the next pass.
+    # still leaves a short pause before the next pass.
     until_full = config["interval_seconds"] - (now - last_full_started)
+    if next_priority_at is not None and until_full > 0:
+        return min(until_full, max(0, next_priority_at - now))
     return max(60, min(config["priority_interval_seconds"], until_full))
 
 
@@ -588,9 +650,13 @@ def run_sync(config_path, once=True):
             raise SyncError("another sync coordinator already owns this data directory") from exc
         daemon = None
         if not once:
+            state_path = root / "sync-state.json"
+            previous = json.loads(state_path.read_text()) if state_path.exists() else {}
             daemon = {"status": "starting", "pid": os.getpid(), "pid_scope": "current process namespace",
                 "started_at": utcnow(), "interval_seconds": config["interval_seconds"],
                 "scope": [item["id"] for item in config["lists"]], "cycles_completed": 0,
+                "last_priority_refresh_at": previous.get("last_priority_refresh_at"),
+                "last_priority_refresh_status": previous.get("last_priority_refresh_status"),
                 "persistence": "Current workspace process; survival after workspace termination is not guaranteed."}
             atomic_json(root / "daemon-state.json", daemon)
         consecutive_errors = 0
@@ -605,7 +671,7 @@ def run_sync(config_path, once=True):
                     daemon.update(status="syncing", cycle_started_at=utcnow())
                     atomic_json(root / "daemon-state.json", daemon)
                 try:
-                    state = sync_once(cycle_config)
+                    state = sync_once(cycle_config, full=full, daemon=daemon)
                 except Exception as exc:
                     state_path = root / "sync-state.json"
                     state = json.loads(state_path.read_text()) if state_path.exists() else {"lists": {}}
@@ -619,8 +685,19 @@ def run_sync(config_path, once=True):
                     "finished_at": state["cycle_finished_at"]}), flush=True)
                 if once:
                     return state
-                consecutive_errors = consecutive_errors + 1 if state["status"] == "error" else 0
-                delay = next_delay(config, consecutive_errors, last_full_started, time.time())
+                if state["status"] == "error":
+                    consecutive_errors += 1
+                elif not full and state["status"] == "partial":
+                    consecutive_errors = state.get("priority_consecutive_errors", consecutive_errors + 1)
+                else:
+                    consecutive_errors = 0
+                next_priority_at = (dt.datetime.fromisoformat(state["next_priority_refresh_at"]).timestamp()
+                    if state.get("next_priority_refresh_at") else None)
+                now = time.time()
+                delay = next_delay(config, consecutive_errors, last_full_started, now,
+                    next_priority_at=next_priority_at)
+                if not full:
+                    delay = min(delay, max(0, config["interval_seconds"] - (now - last_full_started)))
                 daemon.update(status="sleeping", last_cycle_status=state["status"], last_cycle_scope="full" if full else "priority",
                     cycles_completed=daemon["cycles_completed"] + 1, consecutive_errors=consecutive_errors,
                     last_cycle_finished_at=state["cycle_finished_at"],

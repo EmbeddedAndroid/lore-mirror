@@ -164,7 +164,7 @@ class SyncSafetyTests(unittest.TestCase):
             cfg = root / 'config.json'
             cfg.write_text(json.dumps(dict(cfg_dict, data_dir=tmp)))
             sleeps, scopes = [], []
-            def fake_sync(config):
+            def fake_sync(config, **kwargs):
                 scopes.append([item['id'] for item in config['lists']])
                 result = results[len(scopes) - 1]
                 if isinstance(result, Exception):
@@ -203,6 +203,45 @@ class SyncSafetyTests(unittest.TestCase):
         self.assertEqual(scopes[1], ['u-boot', 'op-tee'])
         self.assertTrue(all(60 <= x <= 300 for x in sleeps))
         self.assertEqual(status['last_cycle_scope'], 'priority')
+
+    def test_daemon_backs_off_after_partial_priority_cycles(self):
+        ok = {'status': 'ready', 'pending_lists': [], 'unsafe_index': False,
+            'cycle_finished_at': '2026-01-01T00:00:00+00:00'}
+        partial = dict(ok, status='partial', pending_lists=['hot'])
+        cfg = {'lists': [{'id': 'hot'}, {'id': 'cold'}], 'interval_seconds': 3600,
+            'priority_lists': ['hot'], 'priority_interval_seconds': 300}
+        with mock.patch('lore_mirror.sync.time.time', return_value=0):
+            sleeps, scopes, status = self._run_daemon_cycles(cfg, [ok, partial, partial, ok], 4)
+        self.assertEqual(sleeps, [300, 60, 120, 300])
+        self.assertEqual(scopes, [['hot', 'cold'], ['hot'], ['hot'], ['hot']])
+        self.assertEqual(status['consecutive_errors'], 0)
+
+    def test_priority_backoff_does_not_delay_due_full_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'config.json'
+            path.write_text(json.dumps({'data_dir': tmp, 'lists': [{'id': 'hot'}, {'id': 'cold'}],
+                'priority_lists': ['hot'], 'priority_interval_seconds': 300, 'interval_seconds': 3600}))
+            now, sleeps, scopes = [0], [], []
+            def cycle(config, **kwargs):
+                scopes.append(kwargs['full'])
+                if not kwargs['full']:
+                    now[0] = 3500
+                return {'status': 'ready' if kwargs['full'] else 'partial',
+                    'pending_lists': [] if kwargs['full'] else ['hot'],
+                    'priority_consecutive_errors': 4, 'cycle_finished_at': '2026-01-01T00:00:00+00:00'}
+            def sleep(seconds):
+                sleeps.append(seconds)
+                now[0] += seconds
+                if len(sleeps) == 2:
+                    raise KeyboardInterrupt
+            with mock.patch('lore_mirror.sync.sync_once', side_effect=cycle), \
+                 mock.patch('lore_mirror.sync.time.time', side_effect=lambda: now[0]), \
+                 mock.patch('lore_mirror.sync.time.sleep', side_effect=sleep), \
+                 mock.patch('lore_mirror.sync.signal.signal'), mock.patch('builtins.print'):
+                with self.assertRaises(KeyboardInterrupt):
+                    run_sync(path, once=False)
+            self.assertEqual(scopes, [True, False])
+            self.assertEqual(sleeps, [300, 100])
 
     def test_priority_config_is_validated(self):
         with tempfile.TemporaryDirectory() as tmp:
