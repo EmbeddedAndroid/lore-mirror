@@ -5,7 +5,7 @@
 set -eu
 PREFIX=${1:-"$PWD/.runtime"}
 case "$PREFIX" in /*) ;; *) PREFIX="$PWD/$PREFIX" ;; esac
-PIN=94b6bbb95cb88a6de59458b47869c74fc0c901ad
+PIN=d6b9850df271f3fed85f6d222ec39249d8bc061f
 mkdir -p "$PREFIX/src" "$PREFIX/deps" "$PREFIX/logs"
 if [ "${LORE_SKIP_DEPS:-0}" != 1 ]; then
     # XS modules must match the OS Perl ABI: do not load these into another Perl.

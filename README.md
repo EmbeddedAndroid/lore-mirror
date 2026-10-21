@@ -39,10 +39,10 @@ git init .deps/public-inbox
 git -C .deps/public-inbox remote add origin \
   https://kernel.googlesource.com/pub/scm/infra/public-inbox
 git -C .deps/public-inbox fetch --depth=1 origin \
-  94b6bbb95cb88a6de59458b47869c74fc0c901ad
+  d6b9850df271f3fed85f6d222ec39249d8bc061f
 git -C .deps/public-inbox checkout --detach FETCH_HEAD
 test "$(git -C .deps/public-inbox rev-parse HEAD)" = \
-  94b6bbb95cb88a6de59458b47869c74fc0c901ad
+  d6b9850df271f3fed85f6d222ec39249d8bc061f
 (cd .deps/public-inbox && perl Makefile.PL && make -j2 && make test && sudo make install)
 
 scripts/setup.sh --mode native
@@ -84,7 +84,7 @@ The worker enforces the reserve during synchronization too. Passing the reserve 
 Install Docker Engine or Docker Desktop with Compose v2.20 or newer and Bash.
 No host Python, Perl or compiler is needed. The image pins the Debian base by
 multi-architecture digest, a signed Debian package snapshot, public-inbox commit
-`94b6bbb95cb88a6de59458b47869c74fc0c901ad`, and hash-locked Python wheels.
+`d6b9850df271f3fed85f6d222ec39249d8bc061f`, and hash-locked Python wheels.
 Builds check those inputs; byte-for-byte identical image output is not claimed.
 The services run as UID/GID 10001 with read-only root filesystems.
 
@@ -355,8 +355,8 @@ Upstream components retain their own licenses. public-inbox source and notices a
 
 ## Upstream references
 
-- [public-inbox pinned source](https://kernel.googlesource.com/pub/scm/infra/public-inbox/+/94b6bbb95cb88a6de59458b47869c74fc0c901ad/)
-- [public-inbox installation instructions](https://kernel.googlesource.com/pub/scm/infra/public-inbox/+/94b6bbb95cb88a6de59458b47869c74fc0c901ad/INSTALL)
+- [public-inbox pinned source](https://kernel.googlesource.com/pub/scm/infra/public-inbox/+/d6b9850df271f3fed85f6d222ec39249d8bc061f/)
+- [public-inbox installation instructions](https://kernel.googlesource.com/pub/scm/infra/public-inbox/+/d6b9850df271f3fed85f6d222ec39249d8bc061f/INSTALL)
 - [LEI query manual](https://public-inbox.org/lei-q.html)
 - [public-inbox external index manual](https://public-inbox.org/public-inbox-extindex.html)
 - [MCP Python SDK 1.29.0](https://pypi.org/project/mcp/1.29.0/)

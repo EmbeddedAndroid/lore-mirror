@@ -37,7 +37,7 @@ if (defined $req->{thread_id}) {
     my $mid = $req->{thread_id};
     $mid =~ s/\A<|>\z//g;
     length($mid) <= 1000 or die "thread id too long\n";
-    # This explicit no-result branch is required by upstream fix 94b6bbb.
+    # This explicit no-result branch is required by upstream fix d6b9850.
     my $tid = $over->mid2tid($mid);
     exit(0) unless defined $tid;
     $opt->{threadid} = $tid;
