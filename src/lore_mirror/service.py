@@ -542,7 +542,7 @@ class MirrorService:
             try:
                 if daemon_path.stat().st_size>65536:raise ValueError("oversized daemon state")
                 recorded=json.loads(daemon_path.read_text())
-                daemon={key:recorded[key] for key in ("status","started_at","cycles_completed","first_successful_cycle_at","last_successful_cycle_at","last_cycle_status","last_cycle_finished_at","next_scheduled_at","stopped_at") if key in recorded}
+                daemon={key:recorded[key] for key in ("status","started_at","cycles_completed","first_successful_cycle_at","last_successful_cycle_at","last_cycle_status","last_cycle_finished_at","next_scheduled_at","stopped_at","code_status","code_error") if key in recorded}
                 daemon["observation"]="Recorded scheduler state, not a live process probe; workspace termination may stop updates"
             except (OSError,ValueError,TypeError):daemon={"error":"invalid daemon state"}
         return {"version":"0.1.0","archive_read_only":True,"query_network":False,"issue_writes":"local_only",

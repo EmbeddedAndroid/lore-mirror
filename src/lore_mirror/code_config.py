@@ -5,6 +5,8 @@ proof that a branch exists or that any code is ready to search.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 from pathlib import Path
@@ -16,6 +18,15 @@ from .code_runtime import code_ref_valid
 TRUSTED_CODE_HOSTS = frozenset({
     "git.kernel.org", "git.u-boot-project.org", "source.denx.de",
 })
+CODE_STATE_MAX_BYTES = 4 * 1024 * 1024
+
+
+def code_catalog_fingerprint(tree):
+    """Bind published objects to the upstream and selected ref policy."""
+    fields = {key: tree[key] for key in ("url", "refs", "tag_patterns", "branch_patterns", "default_ref")}
+    return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+
+
 KERNEL_MANIFEST_URL = "https://git.kernel.org/manifest.js.gz"
 DEFAULT_CODE_LIMITS = {
     "fetch_timeout_seconds": 900,

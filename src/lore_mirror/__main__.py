@@ -10,7 +10,7 @@ from .errors import MirrorError
 def main(argv=None):
     parser=argparse.ArgumentParser(prog="lore-mirror")
     sub=parser.add_subparsers(dest="command",required=True)
-    for name in ("serve","stdio","sync","fixture-import","call"):
+    for name in ("serve","stdio","sync","code-sync","fixture-import","call"):
         p=sub.add_parser(name);p.add_argument("--config",required=True)
         if name=="serve":p.add_argument("--listen",default=None);p.add_argument("--port",type=int,default=None)
         if name=="sync":
@@ -20,6 +20,13 @@ def main(argv=None):
     args=parser.parse_args(argv)
     try:
         config=load_config(args.config)
+        if args.command=="code-sync":
+            from .code_sync import CodeSyncError,sync_code_once
+            try:result=sync_code_once(config)
+            except CodeSyncError as exc:
+                print(json.dumps({"error":{"code":"code_sync_error","message":str(exc)}}),file=sys.stderr);return 1
+            print(json.dumps(result))
+            return 0 if result.get("status") in ("ready", "disabled") else 2
         if args.command=="sync":
             from .sync import run_sync
             result=run_sync(args.config,once=not args.daemon)

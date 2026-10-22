@@ -684,6 +684,24 @@ def run_sync(config_path, once=True):
                     atomic_json(state_path, state)
                     if once:
                         raise
+                if config["code"]["enabled"]:
+                    from .code_sync import sync_code_once
+                    def mail_priority_due():
+                        due = state.get("next_priority_refresh_at")
+                        return bool(due and time.time() >= dt.datetime.fromisoformat(due).timestamp())
+                    # Code failures never rewrite a successful mail checkpoint.
+                    # One due tree is offered between mail cycles. Long jobs may
+                    # delay the next mail checkpoint; the interval is not an SLA.
+                    try:
+                        code_state = sync_code_once(config, should_yield=mail_priority_due)
+                        if daemon:
+                            daemon["code_status"] = code_state.get("status", "unknown")
+                            daemon.pop("code_error", None)
+                    except Exception as exc:
+                        if daemon:
+                            daemon["code_status"] = "error"
+                            daemon["code_error"] = str(exc)[:1000]
+                        print(json.dumps({"code_status":"error","error":str(exc)[:1000]}), flush=True)
                 print(json.dumps({"status": state["status"], "pending_lists": state["pending_lists"],
                     "finished_at": state["cycle_finished_at"]}), flush=True)
                 if once:
