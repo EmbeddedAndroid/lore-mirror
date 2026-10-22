@@ -1,0 +1,36 @@
+# Exact-Git code tools
+
+This is opt-in, local-only code browsing. There is no semantic symbol navigation or `code.blame`. The original mail tools remain available. No read tool fetches from the network or starts synchronization.
+
+The example catalog is intent, not a claim that every upstream branch exists. See `code-catalog.md` for verified URL/ref caveats. Keep only U-Boot selected for the first pilot; add one Linux ref only after reviewing measurements and the available HDD/RAM budget. Do not enable all example trees at once on the documented 3891 MiB machine.
+
+## Operator workflow
+
+Add the desired `code` section to the existing configuration, with `enabled: true`. Keep the data under the existing `/data` mount. The normal mail sync daemon offers at most one due code tree after a completed mail cycle, and does not start it when a priority mail refresh is already due. A long Git job can delay the next checkpoint; five minutes is not a hard SLA.
+
+For a deliberate one-tree pilot, `python -m lore_mirror code-sync --config CONFIG` performs one due code unit. This is an administrative CLI, never an MCP tool. Code writers use the same exclusive `index.lock` as mail indexing; a busy lock defers work rather than launching competing heavy HDD activity. Code readers only probe this lock nonblocking and immediately release it. Neither a reader nor its Git subprocess inherits or holds the lock while querying, so an active code query never delays a mail indexer's lock acquisition. A separate code coordinator lock prevents duplicate writers. The usual daemon is preferable to manually looping the command.
+
+Configure only the pilot tree before the first run. Fetch and repository budgets can stop a cold Linux clone; these safety defaults are not promises that full Linux history fits. Keep the existing 30% free-space reserve and current container caps.
+
+## Query contract
+
+All read tools are exposed through existing stdio/HTTP MCP and `POST /api/tools/TOOL`. Code remains unavailable until explicitly configured and successfully mirrored. Discover the exact local full refs with `code.list_refs`; missing and stale state are not silently repaired by a query.
+
+- `code.status()` reports local readiness without starting work, including bounded skipped-noncommit-ref diagnostics, blocked-retry reasons and available pack/ref storage counts. An intentionally skipped non-default ref is reported separately from a missing ref; the configured default must still identify a published commit.
+- `code.list_trees(limit=20,cursor=null)` and `code.list_refs(tree,limit=20,cursor=null)` report configured and published local scope.
+- `code.search(query,tree,ref=null,paths=null,mode="literal",case_sensitive=true,limit=20,cursor=null)` searches one explicit tree at its published ref. Omitted ref selects that catalog's default, not arbitrary HEAD. Results identify exact commit and file content; regex is explicitly selected and dialect limitations are reported. The tree listing that selects candidate files may use at most half of `query_output_bytes`, so a Linux-sized listing is reported partial instead of starving the grep that follows.
+- `code.get_file(tree,ref,path,start_line=1,end_line=null,limit=20,cursor=null)` reads bounded inclusive line ranges from exact published Git content. It does not follow a repository symlink into the host filesystem. Binary files, oversized blobs/lines and invalid ranges have explicit errors.
+- `code.log(tree,ref=null,path=null,since=null,until=null,limit=20,cursor=null)` returns bounded commit metadata, not an unbounded history dump. One NUL-framed Git log invocation reads at most the requested page window plus one overflow record, in Git's default newest-first order; `--date-order` is not used because it loads the whole history before printing the first commit. It does not spawn Git once per commit. Older history outside that window is explicitly partial (`commit_limit`), not an implicit promise that cursors will traverse the entire repository history. A cursor only pages the captured window when the transport envelope splits it into smaller responses.
+- `code.show(tree,commit,paths=null,part="metadata",limit=20,cursor=null)` takes a full commit OID within the published local history. Reachability uses at most one Git walk across the exact published tips, never one subprocess per ref. That walk spans every commit between the tips and the requested one, so a commit deep in a Linux-sized history can exceed `query_memory_bytes` or `query_timeout`; that returns 503 `code_reachability_unknown`, not a claim that the commit is unpublished. Unknown, noncommit or unpublished OIDs return 404. Diff mode is explicitly first-parent, not an implicit combined merge diff.
+
+Tools return `items`, `partial`, `truncated`, `has_more`, `next_cursor`, bounded counts and exact revision metadata. A limit reached or incomplete scan must not be reported as complete absence. A last page does not erase a partial-coverage flag. A large single result produces an explicit error instead of disappearing.
+
+Pagination reuses bounded in-memory sessions, authenticated cursors and current total transport-envelope limits. Code sessions have a separate pool from ordinary mail sessions, so code queries cannot evict mail cursors. The code defaults are 16 sessions, 8 MiB total serialized retained session bytes (including metadata, not a measured Python heap cap) and a 900-second cursor lifetime, configurable under `code.limits.max_sessions`, `session_bytes` and `cursor_ttl`.
+
+Mail changes do not invalidate ordinary code cursors. Relevant code publication does. Restart, expiry or changed query arguments require restarting the query. A fresh read captures exact published identities after its brief nonblocking lock probe and validates the generation before and after the query rather than mixing old and new revisions. Cursor-only pages never probe or acquire `index.lock`; they read the captured session and validate its generations even while a writer is active. Only one fresh heavy code request per API process is admitted; contention reports busy. Metadata/status queries do not initiate background work.
+
+## Safety and verification
+
+Paths and refs are data, not arbitrary Git CLI fragments. The backend disables external diff/text conversion and remote operations, uses no shell, and bounds subprocess output and duration. The API continues to mount mirrors read-only. Do not expose a new unauthenticated search port.
+
+Run `scripts/verify.sh` for ordinary offline tests, `scripts/test-native-e2e.sh` for the mandatory native inbox gate, and `scripts/verify.sh --docker` on a Docker-capable host for image/Compose validation. A skipped native test is not a native pass. No production clone, capacity measurement or deployment is implied by fixture tests.

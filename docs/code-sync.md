@@ -4,7 +4,8 @@ This phase adds storage and exact-revision publication, not a search indexer. It
 uses the existing HDD and 3891 MiB deployment envelope. No SSD, RAM upgrade,
 Zoekt deployment, object-pool deduplication, or production capacity result is
 assumed. Code mirroring stays disabled until the operator selects and enables a
-validated catalog. See `code-catalog.md` for configuration.
+validated catalog. See `code-catalog.md` for configuration and `code-tools.md`
+for the separate local-only read interface.
 
 ## Invocation and ownership
 
@@ -18,6 +19,7 @@ fixture seam, not an API/config option that can bypass upstream URL policy.
 - A separate `code-sync.lock` admits one code coordinator.
 - Every tree takes the existing `<data_dir>/index.lock` with nonblocking flock.
   This is the same lock used by mail indexing and other code writers.
+  Readers only probe it at fresh-query admission, then release it immediately.
   It is released between trees. A held lock yields `waiting_for_io`, not an
   overlapping job. The callback yields before a due mail-priority checkpoint.
 - Default one-tree work units, oldest-due ordering, completion-based intervals,

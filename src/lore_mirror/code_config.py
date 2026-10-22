@@ -23,7 +23,8 @@ CODE_STATE_MAX_BYTES = 4 * 1024 * 1024
 
 def code_catalog_fingerprint(tree):
     """Bind published objects to the upstream and selected ref policy."""
-    fields = {key: tree[key] for key in ("url", "refs", "tag_patterns", "branch_patterns", "default_ref")}
+    fields = {key: tree[key] for key in ("url", "refs", "tag_patterns", "default_ref")}
+    fields["branch_patterns"] = tree.get("branch_patterns", [])
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
 
 
@@ -42,6 +43,9 @@ DEFAULT_CODE_LIMITS = {
     "max_file_bytes": 1024 * 1024,
     "max_line_bytes": 4096,
     "scan_limit": 1000,
+    "max_sessions": 16,
+    "session_bytes": 8 * 1024 * 1024,
+    "cursor_ttl": 900,
 }
 _LIMIT_MAXIMA = {
     "fetch_timeout_seconds": 3600,
@@ -57,6 +61,9 @@ _LIMIT_MAXIMA = {
     "max_file_bytes": 16 * 1024 * 1024,
     "max_line_bytes": 8192,
     "scan_limit": 10000,
+    "max_sessions": 64,
+    "session_bytes": 32 * 1024 * 1024,
+    "cursor_ttl": 3600,
 }
 _CODE_KEYS = {"enabled", "root_dir", "trees", "limits", "max_refs", "min_free_fraction"}
 _TREE_KEYS = {"id", "name", "url", "default_ref", "refs", "tag_patterns", "branch_patterns", "fetch_mode", "manifest_url", "manifest_key", "interval_seconds"}

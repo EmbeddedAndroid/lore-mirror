@@ -52,6 +52,11 @@ class SharedCodeStateTests(unittest.TestCase):
         first["trees"]["changed"] = {}
         self.assertEqual(load_code_state(self.path, missing_ok=True), empty_code_state())
 
+    def test_disabled_reader_never_reads_disk(self):
+        from lore_mirror.code_backend import CodeBackend
+        backend = CodeBackend({"data_dir": str(self.root), "code": {"enabled": False}})
+        with patch("lore_mirror.code_backend.load_code_state", side_effect=AssertionError("disabled disk read")):
+            self.assertEqual(backend._state(), empty_code_state())
 
     def test_symlink_directory_fifo_and_oversized_checkpoint_fail_closed(self):
         target = self.root / "target.json"

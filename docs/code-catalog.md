@@ -130,6 +130,13 @@ never weaken the 30% free-space reserve. The current host stays unchanged.
 | `max_file_bytes` | 1 MiB | 16 MiB |
 | `max_line_bytes` | 4096 | 8192 |
 | `scan_limit` | 1000 | 10000 |
+| `max_sessions` | 16 | 64 |
+| `session_bytes` | 8 MiB | 32 MiB |
+| `cursor_ttl` | 900 seconds | 3600 seconds |
+
+Code cursor capacity, bytes and expiry use an independent pool; code requests
+cannot consume or evict mail cursor sessions. All code callers use the normalized
+defaults in one place, and exact head/tag syntax uses the same validator.
 
 All are positive integers except `query_timeout`, which also accepts a positive
 finite fraction for small test budgets. `manifest_expanded_bytes` must be at

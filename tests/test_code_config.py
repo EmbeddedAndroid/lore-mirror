@@ -46,6 +46,15 @@ class CodeConfigTests(unittest.TestCase):
             proc.assert_not_called()
             network.assert_not_called()
 
+    def test_code_cursor_budgets_have_independent_defaults_and_bounds(self):
+        limits = self.normalize()["limits"]
+        self.assertEqual((limits["max_sessions"], limits["session_bytes"], limits["cursor_ttl"]),
+                         (16, 8 * 1024**2, 900))
+        for key, maximum in (("max_sessions", 64), ("session_bytes", 32 * 1024**2), ("cursor_ttl", 3600)):
+            self.assertEqual(self.normalize(limits={key: maximum})["limits"][key], maximum)
+            for invalid in (False, 0, maximum + 1):
+                with self.subTest(key=key, invalid=invalid):
+                    self.invalid({"limits": {key: invalid}})
 
     def test_pure_and_idempotent(self):
         original = {"enabled": True, "trees": [kernel_tree(tag_patterns=[{"pattern": "refs/tags/v*", "keep": None}])]}

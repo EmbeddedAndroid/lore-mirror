@@ -39,8 +39,10 @@ class MirrorService:
         Path(self.cfg["runtime_dir"]).mkdir(parents=True,exist_ok=True)
         Path(self.cfg["issue_dir"]).mkdir(parents=True,exist_ok=True)
         self.backend=FixtureBackend(self.cfg) if self.cfg["backend"]=="fixture" else PublicInboxBackend(self.cfg)
+        self._code_backend=None
+        self.code_query_slots=threading.BoundedSemaphore(1)
         self.secret=secrets.token_bytes(32)
-        self.sessions={}; self.mutex=threading.RLock(); self.issue_calls=[]; self.query_slots=threading.BoundedSemaphore(4)
+        self.sessions={}; self.code_sessions={}; self.mutex=threading.RLock(); self.issue_calls=[]; self.query_slots=threading.BoundedSemaphore(4)
         self.issue_db=Path(self.cfg["issue_dir"])/"issues.sqlite3"
         with sqlite3.connect(self.issue_db) as db:
             db.execute("CREATE TABLE IF NOT EXISTS issues(id TEXT PRIMARY KEY, idem TEXT UNIQUE NOT NULL, created TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, context TEXT NOT NULL)")
@@ -48,6 +50,33 @@ class MirrorService:
                     "mail.get_series":self.get_series,"mail.in_flight":self.in_flight,"mail.was_posted":self.was_posted,
                     "mail.list_lists":self.list_lists,"mail.status":self.status,
                     "issue.report":self.issue_report,"issue.get":self.issue_get,"issue.list":self.issue_list}
+        self.tools.update({"code.search":self.code_search,"code.get_file":self.code_get_file,
+            "code.log":self.code_log,"code.show":self.code_show,"code.list_trees":self.code_list_trees,
+            "code.list_refs":self.code_list_refs,"code.status":self.code_status})
+
+    @property
+    def code_backend(self):
+        if self._code_backend is None:
+            if not self.cfg["code"]["enabled"]:
+                raise MirrorError("code_disabled","Code tools are disabled",503)
+            from .code_backend import CodeBackend
+            self._code_backend=CodeBackend(self.cfg)
+        return self._code_backend
+
+    @code_backend.setter
+    def code_backend(self,value):
+        self._code_backend=value
+
+
+    @staticmethod
+    def _is_code_operation(operation):
+        return operation.startswith("code.")
+
+    def _session_pool(self,operation):
+        return self.code_sessions if self._is_code_operation(operation) else self.sessions
+
+    def _session_limits(self,operation):
+        return self.cfg["code"]["limits"] if self._is_code_operation(operation) else self.limits
 
     def generation(self):
         state=Path(self.cfg["data_dir"])/"sync-state.json"
@@ -96,6 +125,15 @@ class MirrorService:
                 try:
                     with self.read_guard(): result=self.tools[name](**args)
                 finally: self.query_slots.release()
+            elif name.startswith("code.") and name!="code.status":
+                if not self.code_query_slots.acquire(blocking=False):
+                    raise MirrorError("busy", "Local code query concurrency limit reached", 429)
+                try:
+                    if args.get("cursor"):
+                        result=self.tools[name](**args)
+                    else:
+                        with self.code_backend.read_guard(): result=self.tools[name](**args)
+                finally: self.code_query_slots.release()
             else: result=self.tools[name](**args)
         except TypeError as exc:
             raise MirrorError("invalid_arguments",str(exc)[:300]) from exc
@@ -153,6 +191,9 @@ class MirrorService:
                 "native_query_syntax":self.backend.native_syntax,
                 "completeness":"relative_to_locally_indexed_mail; see mail.status for sync gaps"}
 
+    def _operation_generation(self, operation):
+        return self.code_backend.generation() if operation.startswith("code.") else self.generation()
+
     def _token(self,session,offset):
         payload=base64.urlsafe_b64encode(encoded({"s":session,"o":offset})).decode().rstrip("=")
         signature=hmac.new(self.secret,payload.encode(),hashlib.sha256).hexdigest()
@@ -164,9 +205,9 @@ class MirrorService:
             payload,sig=token.rsplit(".",1)
             if not hmac.compare_digest(sig,hmac.new(self.secret,payload.encode(),hashlib.sha256).hexdigest()): raise ValueError()
             info=json.loads(base64.urlsafe_b64decode(payload+"="*(-len(payload)%4)))
-            session=self.sessions[info["s"]]
+            session=self._session_pool(operation)[info["s"]]
             if session["expires"]<time.monotonic(): raise MirrorError("expired_cursor","Cursor expired; restart the query",409)
-            if session["generation"]!=self.generation(): raise MirrorError("stale_cursor","Index changed; restart the query",409)
+            if session["generation"]!=self._operation_generation(operation): raise MirrorError("stale_cursor","Index changed; restart the query",409)
             if session["op"]!=operation or session["params"]!=hashlib.sha256(encoded(params)).hexdigest(): raise MirrorError("cursor_mismatch","Cursor belongs to another query")
             offset=info["o"]
             if not isinstance(offset,int) or offset<0 or offset>len(session["items"]): raise ValueError()
@@ -179,20 +220,26 @@ class MirrorService:
             raise MirrorError("invalid_limit",f"limit must be 1..{self.limits['max_page_size']}")
         with self.mutex:
             now=time.monotonic()
-            for key in list(self.sessions):
-                if self.sessions[key]["expires"]<now: del self.sessions[key]
+            sessions=self._session_pool(op)
+            limits=self._session_limits(op)
+            for key in list(sessions):
+                if sessions[key]["expires"]<now: del sessions[key]
             if cursor:
                 sid,session,offset=self._cursor(cursor,op,params)
             else:
                 items=items or []
-                size=len(encoded(items))
-                if size>self.limits["session_bytes"]: raise MirrorError("scan_limit","Candidate metadata exceeds query-session budget; narrow query",413)
-                while self.sessions and (len(self.sessions)>=self.limits["max_sessions"] or sum(x["bytes"] for x in self.sessions.values())+size>self.limits["session_bytes"]):
-                    del self.sessions[next(iter(self.sessions))]
                 sid=secrets.token_urlsafe(18);offset=0
                 session={"op":op,"params":hashlib.sha256(encoded(params)).hexdigest(),"items":items,"partial":partial,
-                         "extra":extra or {},"expires":now+self.limits["cursor_ttl"],"generation":self.generation(),"bytes":size}
-                self.sessions[sid]=session
+                         "extra":extra or {},"expires":now+limits["cursor_ttl"],"generation":self._operation_generation(op)}
+                # Code metadata includes retained queries/paths even for no-hit
+                # results. Charge the whole serialized session plus a bounded
+                # allowance for its byte-count field, not just result rows.
+                size=len(encoded(session))+32 if self._is_code_operation(op) else len(encoded(items))
+                if size>limits["session_bytes"]: raise MirrorError("scan_limit","Candidate metadata exceeds query-session budget; narrow query",413)
+                while sessions and (len(sessions)>=limits["max_sessions"] or sum(x["bytes"] for x in sessions.values())+size>limits["session_bytes"]):
+                    del sessions[next(iter(sessions))]
+                session["bytes"]=size
+                sessions[sid]=session
             base={"items":[],"next_cursor":None,"has_more":True,"partial":session["partial"],"truncated":True,
                   "matched_count":len(session["items"]),"count_kind":"lower_bound" if session["partial"] else "exact_within_local_scope",
                   "index_generation":session["generation"],**session["extra"]}
@@ -207,6 +254,43 @@ class MirrorService:
                     "partial":session["partial"],"truncated":more or session["partial"],
                     "matched_count":len(session["items"]),"count_kind":"lower_bound" if session["partial"] else "exact_within_local_scope",
                     "index_generation":session["generation"],**session["extra"]}
+
+    def _code_page(self, name, params, limit, cursor):
+        if cursor:
+            return self._page(name, params, limit=limit, cursor=cursor)
+        kwargs={"limit":limit} if name=="code.log" else {}
+        result=getattr(self.code_backend,name.split(".",1)[1])(**params,**kwargs)
+        return self._page(name,params,result["items"],limit=limit,
+            partial=result.get("partial",False),extra=result.get("metadata",{}))
+
+    def code_search(self, query, tree, ref=None, paths=None, mode="literal", case_sensitive=True, limit=20, cursor=None):
+        params=dict(query=query,tree=tree,ref=ref,paths=paths,mode=mode,case_sensitive=case_sensitive)
+        return self._code_page("code.search",params,limit,cursor)
+
+    def code_get_file(self, tree, ref, path, start_line=1, end_line=None, limit=20, cursor=None):
+        return self._code_page("code.get_file",dict(tree=tree,ref=ref,path=path,start_line=start_line,end_line=end_line),limit,cursor)
+
+    def code_log(self, tree, ref=None, path=None, since=None, until=None, limit=20, cursor=None):
+        return self._code_page("code.log",dict(tree=tree,ref=ref,path=path,since=since,until=until),limit,cursor)
+
+    def code_show(self, tree, commit, paths=None, part="metadata", limit=20, cursor=None):
+        return self._code_page("code.show",dict(tree=tree,commit=commit,paths=paths,part=part),limit,cursor)
+
+    def code_list_trees(self, limit=20, cursor=None):
+        return self._code_page("code.list_trees",{},limit,cursor)
+
+    def code_list_refs(self, tree, limit=20, cursor=None):
+        return self._code_page("code.list_refs",dict(tree=tree),limit,cursor)
+
+
+
+
+    def code_status(self):
+        if self._code_backend is None and not self.cfg["code"]["enabled"]:
+            return {"enabled":False,"ready":False,"available":False,"status":"disabled",
+                    "code_generation":"0","configured_trees":0,"trees":[]}
+        result=self.code_backend.status()
+        return result
 
     def search(self,query="",lists=None,class_filter=None,limit=20,cursor=None):
         query=self._query(query);scope=self._scope(lists,class_filter)
