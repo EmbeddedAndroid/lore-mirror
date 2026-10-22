@@ -9,12 +9,14 @@ mkdir -p evidence/deploy-63
 if docker ps --format '{{.Names}}' | grep -q '^lore-mirror-sync-'; then
   echo 'Stop this stack before rerunning the build and test deployment.' >&2; exit 2
 fi
+bind=${LORE_BIND_ADDR:?Set LORE_BIND_ADDR to the address to publish on}
 fingerprint="$(cat SOURCE_COMMIT)-$(date -u +%Y%m%dT%H%M%S)-$(cat /proc/sys/kernel/random/uuid)"
 cat > .env <<ENV
 COMPOSE_FILE=compose.yaml:compose.bind.yaml:compose.deploy-63.yaml
 LORE_DATA_DIR=/srv/lore-mirror-data
 LORE_CONFIG=./config/full-manifest.json
 LORE_PORT=8765
+LORE_BIND_ADDR=$bind
 LORE_BUILD_FINGERPRINT=$fingerprint
 ENV
 export LORE_BUILD_FINGERPRINT="$fingerprint"
@@ -24,7 +26,7 @@ docker compose --profile test run --rm --no-deps test
 if [[ ! -f config/full-manifest.json ]]; then
   docker run --rm --memory=256m --memory-swap=256m --entrypoint python lore-mirror:deploy-63 \
     /app/scripts/configure-manifest.py --full-manifest --template /app/config/deploy-63.json \
-    > config/full-manifest.json.tmp
+    | sed "s/@LORE_HOST@/$bind/g" > config/full-manifest.json.tmp
   mv config/full-manifest.json.tmp config/full-manifest.json
 fi
 docker compose run --rm --no-deps -T --entrypoint python sync -c '

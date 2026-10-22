@@ -18,3 +18,5 @@ config/full-manifest.json
 .env
 evidence/
 artifacts/
+HANDOFF.md
+REPORT-DEPLOY-63.md

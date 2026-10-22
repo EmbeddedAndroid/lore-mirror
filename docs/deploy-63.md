@@ -9,8 +9,8 @@ used. Mail is a bind mount at /srv/lore-mirror-data, owned by 10001:10001.
 Run on the laptop after committing the deployment change:
 
 ```sh
-scripts/sync-deploy-63.sh
-ssh -F /dev/null root@<host> 'cd /srv/lore-mirror && mkdir -p evidence/deploy-63 && nohup scripts/deploy-63.sh > evidence/deploy-63/deploy.log 2>&1 < /dev/null &'
+LORE_DEPLOY_HOST=<host> scripts/sync-deploy-63.sh
+ssh -F /dev/null root@<host> 'cd /srv/lore-mirror && mkdir -p evidence/deploy-63 && LORE_BIND_ADDR=<host> nohup scripts/deploy-63.sh > evidence/deploy-63/deploy.log 2>&1 < /dev/null &'
 ```
 
 Poll the log during the native arm64 build. The script runs the entire offline
@@ -54,7 +54,7 @@ completed inbox advances the pagination generation. Interrupted basic/shared
 writes retain the unsafe flag until recovery, even if a later inbox succeeds;
 status reports it.
 
-The host-only override publishes `<host>:8765` for the explicitly
+The host-only override publishes `$LORE_BIND_ADDR:8765` for the explicitly
 requested LAN HTTP MCP endpoint. It is unauthenticated and confined to this
 binding. The host template allows exactly <host>:8765 in Host and
 http://<host>:8765 in Origin while retaining DNS rebinding protection.

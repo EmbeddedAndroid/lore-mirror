@@ -22,7 +22,7 @@ services:
     image: lore-mirror:deploy-63
     memswap_limit: 64m
     ports: !override
-      - "<host>:${LORE_PORT:-8765}:8765"
+      - "${LORE_BIND_ADDR:?Set LORE_BIND_ADDR to the host address to publish on}:${LORE_PORT:-8765}:8765"
     depends_on:
       api:
         condition: service_started

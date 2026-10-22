@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+host=${LORE_DEPLOY_HOST:?Set LORE_DEPLOY_HOST to the deployment host}
 mkdir -p artifacts/deploy-63
 git diff --exit-code HEAD -- . ':!HANDOFF.md' ':!REPORT-DEPLOY-63.md'
 git ls-files -z > artifacts/deploy-63/source-files
@@ -12,6 +13,6 @@ docker run --rm --mount "type=bind,src=$PWD,dst=/source,readonly" \
   --mount "type=bind,src=$HOME/.ssh/known_hosts,dst=/known_hosts,readonly" \
   lore-mirror:transport -az --from0 --files-from=/source/artifacts/deploy-63/source-files \
   -e 'ssh -i /key -o BatchMode=yes -o UserKnownHostsFile=/known_hosts -o StrictHostKeyChecking=yes' \
-  /source/ root@<host>:/srv/lore-mirror/
-ssh -F /dev/null -o BatchMode=yes root@<host> \
+  /source/ root@"$host":/srv/lore-mirror/
+ssh -F /dev/null -o BatchMode=yes root@"$host" \
   'cat > /srv/lore-mirror/SOURCE_COMMIT' < artifacts/deploy-63/SOURCE_COMMIT

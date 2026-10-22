@@ -90,7 +90,7 @@
       "source_url": "https://git.u-boot-project.org/u-boot/u-boot/-/raw/8d7bc8add17bbc69a58dfe0002eea039dd2dc1bc/MAINTAINERS"
     }
   },
-  "scope_note": "Host <host> template: generate the full manifest before starting.",
+  "scope_note": "Deployment host template: scripts/deploy-63.sh fills in the host placeholder and generates the full manifest before starting.",
   "index_batch_size": "4m",
   "job_memory_limit_bytes": 1879048192,
   "job_timeout_seconds": 604800,
@@ -101,11 +101,11 @@
     "localhost",
     "[::1]:*",
     "[::1]",
-    "<host>:8765"
+    "@LORE_HOST@:8765"
   ],
   "allowed_origins": [
     "http://127.0.0.1:*",
     "http://localhost:*",
-    "http://<host>:8765"
+    "http://@LORE_HOST@:8765"
   ]
 }

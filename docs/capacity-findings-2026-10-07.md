@@ -61,5 +61,5 @@ margin, and the stack's own 30% headroom rule caps usable space at about
 
 - The packaging work is one large commit (b4d37b4) plus a deployment commit;
   split into logical commits before treating the repo as reviewable.
-- REPORT.md, REPORT-DEPLOY-63.md and HANDOFF.md are agent notes committed in
-  the repo; move them out of history when cleaning up.
+- REPORT.md is an agent note committed in the repo; move it out of history
+  when cleaning up.
