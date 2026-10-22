@@ -10,9 +10,10 @@ from .errors import MirrorError
 def main(argv=None):
     parser=argparse.ArgumentParser(prog="lore-mirror")
     sub=parser.add_subparsers(dest="command",required=True)
-    for name in ("serve","stdio","sync","code-sync","fixture-import","call"):
+    for name in ("serve","stdio","sync","code-sync","code-index","fixture-import","call"):
         p=sub.add_parser(name);p.add_argument("--config",required=True)
         if name=="serve":p.add_argument("--listen",default=None);p.add_argument("--port",type=int,default=None)
+        if name=="code-index":p.add_argument("--preflight",action="store_true")
         if name=="sync":
             mode=p.add_mutually_exclusive_group();mode.add_argument("--once",action="store_true");mode.add_argument("--daemon",action="store_true")
         if name=="fixture-import":p.add_argument("path")
@@ -20,6 +21,16 @@ def main(argv=None):
     args=parser.parse_args(argv)
     try:
         config=load_config(args.config)
+        if args.command=="code-index":
+            from .code_index import CodeIndexError, _enforced_memory_limit, index_code_once
+            try:
+                result=({"status":"ready", "preflight_only":True,
+                         "enforced_memory":_enforced_memory_limit(config["code"]["index"]["memory_bytes"])}
+                        if args.preflight else index_code_once(config))
+            except CodeIndexError as exc:
+                raise MirrorError("code_index_error", str(exc)[:160], 503) from exc
+            print(json.dumps(result))
+            return 0 if result.get("status") in ("ready", "disabled", "unchanged") else 2
         if args.command=="code-sync":
             from .code_sync import CodeSyncError,sync_code_once
             try:result=sync_code_once(config)

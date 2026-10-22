@@ -267,6 +267,7 @@ class CodeSyncTests(unittest.TestCase):
 
     def test_release_branch_patterns_choose_numeric_versions_per_prefix(self):
         tree = {"refs": ["refs/heads/for-next"], "tag_patterns": [],
+                "index_refs": ["refs/heads/for-next"],
                 "branch_patterns": [{"pattern": "refs/heads/" + prefix + "-for-*", "keep": 1}
                                     for prefix in ("arm64", "drivers", "clk")]}
         names = ["refs/heads/for-next"] + ["refs/heads/" + prefix + "-for-" + version
@@ -276,6 +277,7 @@ class CodeSyncTests(unittest.TestCase):
         selected = _selected_refs(raw, tree, 100)
         self.assertEqual(set(selected), {"refs/heads/for-next"} | {
             "refs/heads/" + prefix + "-for-7.10.12" for prefix in ("arm64", "drivers", "clk")})
+        self.assertEqual(tree["index_refs"], ["refs/heads/for-next"])
 
     def test_release_branch_pattern_without_numeric_release_fails(self):
         tree = {"refs": ["refs/heads/main"], "tag_patterns": [],
@@ -307,6 +309,7 @@ class CodeSyncTests(unittest.TestCase):
     def test_release_rollover_mirrors_newest_and_preserves_prior_pins(self):
         tree = self.config["code"]["trees"][0]
         tree["branch_patterns"] = [{"pattern": "refs/heads/drivers-for-*", "keep": 1}]
+        tree["index_refs"] = ["refs/heads/main"]
         git(self.source, "branch", "drivers-for-7.9", self.first)
         first = self.run_once()
         self.assertEqual(first["trees"]["boot"]["status"], "ready", first)
@@ -319,6 +322,7 @@ class CodeSyncTests(unittest.TestCase):
         self.assertNotIn("refs/heads/drivers-for-7.9", refs)
         self.assertNotIn("refs/heads/drivers-for-99.0-rc1", refs)
         self.assertEqual(git(self.repo, "rev-parse", "refs/lore/generations/1/heads/drivers-for-7.9"), self.first)
+        self.assertEqual(tree["index_refs"], ["refs/heads/main"])
 
     def test_missing_release_pattern_preserves_previous_generation(self):
         first = self.run_once()
@@ -479,6 +483,21 @@ class CodeSyncTests(unittest.TestCase):
             state = self.run_once(18000)
         self.assertIn("304 without", state["trees"]["boot"]["last_error"])
 
+    def test_lock_is_released_between_tree_units(self):
+        other = dict(self.config["code"]["trees"][0], id="other",
+            url="https://git.u-boot-project.org/u-boot/custodians/u-boot-snapdragon.git")
+        self.config["code"]["trees"].append(other)
+        checks = []
+        def should_yield():
+            with (self.data / "index.lock").open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                checks.append(True)
+            return False
+        self.run_once(should_yield=should_yield)
+        state = self.run_once(should_yield=should_yield)
+        self.assertEqual(state["status"], "ready")
+        self.assertEqual({row["status"] for row in state["trees"].values()}, {"ready"})
+        self.assertEqual(len(checks), 2)
 
     def test_sampled_rss_and_disk_growth_guards(self):
         self.run_once()

@@ -6,8 +6,9 @@ port. Mail-only configurations are unchanged: absent `code` means disabled and
 an empty catalog. The supplied catalog is also **disabled**. No code mirror is
 created merely by loading a configuration or invoking a read tool.
 
-This document covers defining and validating the catalog only; it does not
-fetch, read or search code.
+This document covers defining and validating the catalog, including the
+`index_refs` an optional index pilot may select; it does not fetch, read or
+search code.
 
 ## Add a catalog
 
@@ -65,6 +66,8 @@ checked by the coordinator, not during API startup.
   an explicit error, not permission to replace the selector with `master`.
   The newest selected branch per prefix is mirrored, **not indexed**. Prior
   protected generations may retain older objects; this is not automatic GC.
+- `index_refs`: optional exact subset of `refs`, default empty. It is separate
+  from tag retention. `index.pilot_ref` must name one of them (`code-index.md`).
 - `fetch_mode`: `grokmirror_manifest` for kernel.org; `conditional_refs` for
   U-Boot. Omission uses the matching default; an inconsistent mode is rejected.
 - `manifest_url`: for kernel only, fixed to
@@ -88,10 +91,10 @@ the coordinator must verify the actual advertised refs before publishing.
 
 | ID | Repository / selected refs | Evidence and caveat |
 | --- | --- | --- |
-| `linux-mainline` | `torvalds/linux.git`: `master`; all `v*` release/RC tags | [Official mirror](https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/) identifies the kernel.org source, `master`, and release tags. The default branch is `master`. |
-| `linux-next` | `next/linux-next.git`: `master`; latest three `next-*` tags | [Kernel documentation](https://www.kernel.org/doc/man-pages/linux-next.html) gives the source URL; [official mirror](https://kernel.googlesource.com/pub/scm/linux/kernel/git/next/linux-next/) exposes `master` and dated tags. Daily tags are retained only according to the explicit tag policy. |
+| `linux-mainline` | `torvalds/linux.git`: `master`; all `v*` release/RC tags | [Official mirror](https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/) identifies the kernel.org source, `master`, and release tags. Only `master` is a future index target. |
+| `linux-next` | `next/linux-next.git`: `master`; latest three `next-*` tags | [Kernel documentation](https://www.kernel.org/doc/man-pages/linux-next.html) gives the source URL; [official mirror](https://kernel.googlesource.com/pub/scm/linux/kernel/git/next/linux-next/) exposes `master` and dated tags. Only `master` is a future index target, never all daily tags. |
 | `linux-stable` | `stable/linux.git`: `linux-6.18.y`, `linux-6.12.y`, `linux-6.6.y`, `linux-6.1.y`, `linux-5.15.y`, `linux-5.10.y` | [Kernel.org active release policy](https://www.kernel.org/releases.html) lists these six longterm series at review time; [official mirror](https://kernel.googlesource.com/pub/scm/linux/kernel/git/stable/linux/) identifies the source. No non-LTS branches are selected. The example is intentionally pinned, not a dynamic promise of “current forever”; reassess when upstream LTS policy changes. |
-| `linux-qcom` | `qcom/linux.git`: exact `for-next` for reads; newest numeric `arm64-for-*`, `drivers-for-*`, `clk-for-*` branches mirror-only | The [official mirror listing](https://kernel.googlesource.com/pub/scm/linux/kernel/git/qcom/linux/+refs) observed during review exposed `for-next`, `arm64-for-7.4`, `drivers-for-7.4`, and `clk-for-7.4`. Numeric selectors track future versions; live canonical Git confirmation still occurs at synchronization, since canonical web requests returned 403. |
+| `linux-qcom` | `qcom/linux.git`: exact `for-next` for reads/indexing; newest numeric `arm64-for-*`, `drivers-for-*`, `clk-for-*` branches mirror-only | The [official mirror listing](https://kernel.googlesource.com/pub/scm/linux/kernel/git/qcom/linux/+refs) observed during review exposed `for-next`, `arm64-for-7.4`, `drivers-for-7.4`, and `clk-for-7.4`. Numeric selectors track future versions; live canonical Git confirmation still occurs at synchronization, since canonical web requests returned 403. |
 | `u-boot` | `u-boot/u-boot.git`: `master`, `next` | [Current source documentation](https://docs.u-boot.org/en/latest/build/source.html) names the new `git.u-boot-project.org` host. The [release-cycle page](https://docs.u-boot.org/en/latest/develop/release_cycle.html) describes `next` as closed until 2026-11-09; that alone does not prove the branch is deleted. Live refs were not independently verified because the canonical web host denied access. |
 | `u-boot-qcom` | `u-boot/custodians/u-boot-snapdragon.git`: `qcom-main`, `qcom-next` | [Maintainer's 2026-10-01 pull request](https://mail-archive.com/u-boot%40lists.u-boot-project.org/msg07602.html) explicitly names the new canonical URL and `qcom-next`. Both requested names remain unchanged in the example. Current branch existence is **unverified**, not claimed absent; canonical web access was unavailable. |
 
@@ -102,10 +105,10 @@ identifies the manifest URL and conditional-request model. Pooling, alternates,
 and automatic repack/GC are not part of this catalog contract.
 
 **Missing refs fail explicitly.** A valid declaration is not readiness. For
-Qualcomm, `for-next` is the integration target and the three latest numeric
-release branches are mirror-only. Do not silently replace any later missing
-ref or unmatched selector with `master` or another branch. Resolve changed
-intent with the operator and keep unrelated mail serving normally.
+Qualcomm, `for-next` is the integration and index target and the three latest
+numeric release branches are mirror-only. Do not silently replace any later
+missing ref or unmatched selector with `master` or another branch. Resolve
+changed intent with the operator and keep unrelated mail serving normally.
 
 ## Conservative limits
 
@@ -149,6 +152,6 @@ network-byte quota**. Existing response-envelope limits still apply separately.
 Run `PYTHONPATH=src python -m unittest discover -s tests -p 'test_code_config.py' -v`.
 The catalog tests use no production Git fetches or public network access. They
 cover disabled defaults, idempotence, no load-time side effects, hostile URLs,
-path-safe IDs, exact refs, bounded tag intent, default-ref membership checks,
+path-safe IDs, exact refs, bounded tag intent, default/index subset checks,
 canonical manifest binding, duplicate repositories, cadence, resource bounds,
 numeric release-selector intent, and the example's integration-versus-mirror-only scope.

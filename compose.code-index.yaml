@@ -1,0 +1,41 @@
+# Opt-in, one-shot pilot on the SAME host. Layer after compose.deploy-63.yaml.
+# This is a hard ceiling, not a capacity reservation or proof of host headroom.
+services:
+  code-index:
+    image: ${LORE_CODE_INDEX_IMAGE:-lore-mirror:deploy-63}
+    profiles: [code-index]
+    command: [code-index, --config, /config/pilot.json]
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # Verified image init is PID 1; its direct-child exit tears down this namespace.
+    # Do not add --init, pid: host/service/container, or a shell wrapper.
+    init: false
+    entrypoint: [/usr/bin/tini, --, python, -m, lore_mirror]
+    pids_limit: 64
+    stop_grace_period: 45s
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.5
+    network_mode: none
+    restart: "no"
+    healthcheck:
+      disable: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=32m,uid=10001,gid=10001,mode=1770
+      - /runtime:rw,nosuid,noexec,size=32m,uid=10001,gid=10001,mode=0700
+    volumes:
+      - type: bind
+        source: ${LORE_CONFIG:-./config/container.json}
+        target: /config/pilot.json
+        read_only: true
+        bind:
+          create_host_path: false
+      # Same data volume and /data/index.lock as mail sync and code readers.
+      - mail:/data:rw
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

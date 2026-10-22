@@ -208,7 +208,7 @@ class CodeReaderTests(unittest.TestCase):
         self.assertEqual(len(self.backend.search("new.*value", "tiny", paths=["one.txt"], mode="regex")["items"]), 1)
         self.assertEqual(self.backend.search("new.*value", "tiny", paths=["one.txt"])["items"], [])
         self.error("unsupported_regex", self.backend.search, "(?=new)", "tiny", mode="regex")
-        self.error("unsupported_search_mode", self.backend.search, "new", "tiny", mode="symbol")
+        self.error("symbols_unavailable", self.backend.search, "new", "tiny", mode="symbol")
 
     def test_log_metadata_is_bounded_exact_history(self):
         result = self.backend.log("tiny", "refs/tags/next-20261020", path="one.txt")

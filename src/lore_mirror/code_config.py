@@ -65,8 +65,24 @@ _LIMIT_MAXIMA = {
     "session_bytes": 32 * 1024 * 1024,
     "cursor_ttl": 3600,
 }
-_CODE_KEYS = {"enabled", "root_dir", "trees", "limits", "max_refs", "min_free_fraction"}
-_TREE_KEYS = {"id", "name", "url", "default_ref", "refs", "tag_patterns", "branch_patterns", "fetch_mode", "manifest_url", "manifest_key", "interval_seconds"}
+DEFAULT_CODE_INDEX = {
+    "enabled": False,
+    "symbols": False,
+    "pilot_tree": None,
+    "pilot_ref": None,
+    "memory_bytes": 512 * 1024 * 1024,
+    "timeout_seconds": 1800,
+    "max_index_bytes": 2 * 1024 ** 3,
+    "max_source_bytes": 1024 ** 3,
+}
+_INDEX_MAXIMA = {
+    "memory_bytes": 768 * 1024 * 1024,
+    "timeout_seconds": 7200,
+    "max_index_bytes": 8 * 1024 ** 3,
+    "max_source_bytes": 4 * 1024 ** 3,
+}
+_CODE_KEYS = {"enabled", "root_dir", "trees", "limits", "max_refs", "min_free_fraction", "index"}
+_TREE_KEYS = {"id", "name", "url", "default_ref", "refs", "tag_patterns", "branch_patterns", "index_refs", "fetch_mode", "manifest_url", "manifest_key", "interval_seconds"}
 _ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
 
 
@@ -182,12 +198,40 @@ def _branch_patterns(value):
     return result
 
 
+def _normalize_index(value, *, trees, code_enabled):
+    """Declare one opt-in pilot; a config memory budget is not a cgroup cap."""
+    index = DEFAULT_CODE_INDEX | _mapping(value, "index", set(DEFAULT_CODE_INDEX))
+    for key in ("enabled", "symbols"):
+        if not isinstance(index[key], bool):
+            _invalid("index." + key + " must be boolean")
+    for key, maximum in _INDEX_MAXIMA.items():
+        _integer(index[key], "index." + key, maximum=maximum)
+    tree_id, ref = index["pilot_tree"], index["pilot_ref"]
+    if (tree_id is None) != (ref is None):
+        _invalid("index.pilot_tree and index.pilot_ref must be selected together")
+    if tree_id is not None:
+        if not isinstance(tree_id, str) or not _ID.fullmatch(tree_id):
+            _invalid("index.pilot_tree must be a configured tree id")
+        tree = next((tree for tree in trees if tree["id"] == tree_id), None)
+        if tree is None:
+            _invalid("index.pilot_tree must be a configured tree id")
+        validate_code_ref(ref)
+        if ref not in tree["index_refs"]:
+            _invalid("index.pilot_ref must be an exact configured index_ref of pilot_tree")
+    if index["enabled"] and (not code_enabled or tree_id is None):
+        _invalid("index.enabled requires code.enabled and an explicit pilot_tree/pilot_ref pair")
+    return index
+
+
+
+
 def normalize_code_config(value=None, *, data_dir=None):
     """Normalize a code section for both API load_config and sync prepare_config.
 
     Callers should pass the enclosing data_dir. Existing mail-only configs remain
     disabled with an empty catalog. Invalid disabled sections also fail closed.
-    This catalog declares intent, never current mirror readiness.
+    Indexing is separately opt-in and restricted to one explicit pilot ref.
+    This catalog declares intent, never current mirror or index readiness.
     """
     cfg = _mapping({} if value is None else value, "configuration", _CODE_KEYS)
     enabled = cfg.get("enabled", False)
@@ -246,6 +290,11 @@ def normalize_code_config(value=None, *, data_dir=None):
             _invalid("default_ref must be an explicitly selected exact ref")
         tag_patterns = _tag_patterns(tree.get("tag_patterns", []))
         branch_patterns = _branch_patterns(tree.get("branch_patterns", []))
+        index_refs = _ref_list(tree.get("index_refs", []), "index_refs", max_refs)
+        # Dynamic globs are deliberately not index selectors: current hot heads
+        # are independently declared, and recent retained tags are not indexed.
+        if not set(index_refs).issubset(refs):
+            _invalid("index_refs must be explicitly selected exact refs")
         kernel = urlsplit(url).hostname == "git.kernel.org"
         expected_mode = "grokmirror_manifest" if kernel else "conditional_refs"
         mode = tree.get("fetch_mode", expected_mode)
@@ -255,7 +304,7 @@ def normalize_code_config(value=None, *, data_dir=None):
                             minimum=300 if kernel else 3600, maximum=7 * 86400)
         normalized = {"id": tree_id, "name": name, "url": url,
                       "default_ref": default_ref, "refs": refs, "tag_patterns": tag_patterns,
-                      "branch_patterns": branch_patterns, "fetch_mode": mode, "interval_seconds": interval}
+                      "branch_patterns": branch_patterns, "index_refs": index_refs, "fetch_mode": mode, "interval_seconds": interval}
         if kernel:
             normalized["manifest_url"] = validate_code_url(tree.get("manifest_url", KERNEL_MANIFEST_URL), manifest=True)
             key = tree.get("manifest_key", urlsplit(url).path)
@@ -265,5 +314,6 @@ def normalize_code_config(value=None, *, data_dir=None):
         elif "manifest_url" in tree or "manifest_key" in tree:
             _invalid("conditional_refs trees must not configure a grokmirror manifest")
         trees.append(normalized)
+    index = _normalize_index(cfg.get("index", {}), trees=trees, code_enabled=enabled)
     return {"enabled": enabled, "root_dir": root, "trees": trees, "limits": limits,
-            "max_refs": max_refs, "min_free_fraction": float(reserve)}
+            "max_refs": max_refs, "min_free_fraction": float(reserve), "index": index}

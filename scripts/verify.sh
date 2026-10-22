@@ -12,6 +12,8 @@ if [[ ${1:-} == --docker && $# == 1 ]]; then
   docker compose build
   docker compose --profile test run --rm --no-deps --env LORE_NATIVE_E2E_REQUIRED=1 \
     --entrypoint python test -m unittest discover -s tests -v
+  docker compose --profile test run --rm --no-deps --entrypoint bash test scripts/test-code-index-native.sh
+  "$ROOT/scripts/test-code-index-lifecycle.sh" lore-mirror:local
   exit 0
 elif [[ $# -gt 0 ]]; then
   echo 'Usage: scripts/verify.sh [--docker]' >&2
@@ -22,7 +24,7 @@ if [[ -x "$ROOT/.venv/bin/python" ]]; then PYTHON="$ROOT/.venv/bin/python"; fi
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 export PYTHONDONTWRITEBYTECODE=1
 "$PYTHON" -m compileall -q "$ROOT/src"
-bash -n "$ROOT/scripts/setup.sh" "$ROOT/scripts/verify.sh"
+bash -n "$ROOT/scripts/setup.sh" "$ROOT/scripts/verify.sh" "$ROOT/scripts/test-code-index-native.sh" "$ROOT/scripts/test-code-index-lifecycle.sh"
 "$PYTHON" -m unittest discover -s tests -v
 "$PYTHON" -m lore_mirror --help >/dev/null
 echo 'Python/CLI checks passed; inspect any skipped tests above. Run scripts/test-native-e2e.sh for the mandatory native inbox gate. Docker/Compose build NOT RUN (use --docker on a Docker host).'

@@ -16,6 +16,7 @@ from unittest.mock import patch
 from lore_mirror.code_common import (OID, SHA256, SAFE_REPO_CONFIG, CodeStateError,
     RepositoryOwnershipError, empty_code_state, load_code_state, storage_error,
     validate_code_state, validate_repo_ownership)
+from lore_mirror.code_engine import ENGINE_COMMIT, EngineIdentityError, verify_engine_identity
 
 
 class SharedCodeStateTests(unittest.TestCase):
@@ -197,6 +198,20 @@ class SharedOwnershipTests(unittest.TestCase):
 
 class SharedIdentityAndStorageTests(unittest.TestCase):
 
+    def test_engine_identity_binds_all_enabled_executables(self):
+        identity = {"engine_commit": ENGINE_COMMIT, "indexer_sha256": "a" * 64,
+                    "query_bridge_sha256": "b" * 64, "ctags_sha256": "c" * 64}
+        manifest = {"upstream_commit": ENGINE_COMMIT, **identity}
+        self.assertIs(verify_engine_identity(manifest, identity, symbols=True), identity)
+        for key, reason in (("upstream_commit", "engine"), ("indexer_sha256", "binary"),
+                            ("query_bridge_sha256", "binary"), ("ctags_sha256", "symbols")):
+            with self.subTest(key=key), self.assertRaises(EngineIdentityError) as caught:
+                verify_engine_identity(manifest | {key: "x"}, identity, symbols=True)
+            self.assertEqual(caught.exception.reason, reason)
+        malformed = identity | {"query_bridge_sha256": "not a hash"}
+        with self.assertRaises(EngineIdentityError):
+            verify_engine_identity(manifest | malformed, malformed)
+        verify_engine_identity({key: value for key, value in manifest.items() if key != "ctags_sha256"}, identity)
 
     def test_storage_errno_git_text_and_sqlite_codes_share_one_policy(self):
         for number in (errno.ENOSPC, errno.EDQUOT, errno.EFBIG, errno.EROFS):

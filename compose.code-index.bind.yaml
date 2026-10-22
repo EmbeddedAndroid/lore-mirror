@@ -1,0 +1,11 @@
+# Bind-backed deployment only. Layer LAST, after both compose.bind.yaml and
+# compose.code-index.yaml, so every process sees the same data and index.lock.
+services:
+  code-index:
+    volumes:
+      - type: bind
+        source: ${LORE_DATA_DIR:?Set LORE_DATA_DIR to an existing absolute directory}
+        target: /data
+        read_only: false
+        bind:
+          create_host_path: false

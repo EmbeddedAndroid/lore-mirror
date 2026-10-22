@@ -18,6 +18,9 @@
             "keep": null
           }
         ],
+        "index_refs": [
+          "refs/heads/master"
+        ],
         "fetch_mode": "grokmirror_manifest",
         "interval_seconds": 3600
       },
@@ -34,6 +37,9 @@
             "pattern": "refs/tags/next-*",
             "keep": 3
           }
+        ],
+        "index_refs": [
+          "refs/heads/master"
         ],
         "fetch_mode": "grokmirror_manifest",
         "interval_seconds": 3600
@@ -52,6 +58,9 @@
         ],
         "default_ref": "refs/heads/linux-6.18.y",
         "tag_patterns": [],
+        "index_refs": [
+          "refs/heads/linux-6.18.y"
+        ],
         "fetch_mode": "grokmirror_manifest",
         "interval_seconds": 21600
       },
@@ -64,6 +73,9 @@
         ],
         "default_ref": "refs/heads/for-next",
         "tag_patterns": [],
+        "index_refs": [
+          "refs/heads/for-next"
+        ],
         "fetch_mode": "grokmirror_manifest",
         "interval_seconds": 3600,
         "branch_patterns": [
@@ -91,6 +103,10 @@
         ],
         "default_ref": "refs/heads/master",
         "tag_patterns": [],
+        "index_refs": [
+          "refs/heads/master",
+          "refs/heads/next"
+        ],
         "fetch_mode": "conditional_refs",
         "interval_seconds": 3600
       },
@@ -104,6 +120,10 @@
         ],
         "default_ref": "refs/heads/qcom-main",
         "tag_patterns": [],
+        "index_refs": [
+          "refs/heads/qcom-main",
+          "refs/heads/qcom-next"
+        ],
         "fetch_mode": "conditional_refs",
         "interval_seconds": 3600
       }

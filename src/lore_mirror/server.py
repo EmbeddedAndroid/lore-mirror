@@ -121,7 +121,7 @@ def make_mcp(service):
         """Read paged local issue summaries."""
         return _mcp_call(service,"issue.list",{k:v for k,v in locals().items() if k != "service"})
     def code_search(query:str,tree:str,ref:str|None=None,paths:list[str]|None=None,mode:str="literal",case_sensitive:StrictBool=True,limit:StrictInt=20,cursor:str|None=None)->dict[str,Any]:
-        """Bounded local Git search at one exact published ref; no remote fetching or semantic symbols."""
+        """Bounded exact-ref search: literal, POSIX regex, or optional lexical symbol mode. No remote fetch or semantic navigation."""
         return _mcp_call(service,"code.search",{k:v for k,v in locals().items() if k!="service"})
     def code_get_file(tree:str,ref:str,path:str,start_line:StrictInt=1,end_line:StrictInt|None=None,limit:StrictInt=20,cursor:str|None=None)->dict[str,Any]:
         """Read bounded 1-based inclusive lines from an exact local Git blob."""

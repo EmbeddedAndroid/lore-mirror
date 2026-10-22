@@ -436,7 +436,7 @@ def _selected_refs(raw, tree, maximum):
         if not candidates:
             raise CodeSyncError("configured upstream release branch pattern missing: " + selector["pattern"])
         # Equal numeric versions with different spellings have a stable name
-        # tiebreak. Selection is independent of the explicitly configured refs.
+        # tiebreak. Selection does not expand the independently set index_refs.
         newest = max(candidates)[1]
         selected[newest] = available[newest]
     for selector in tree["tag_patterns"]:

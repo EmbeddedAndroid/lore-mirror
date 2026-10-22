@@ -21,6 +21,7 @@ from .errors import MirrorError
 from .code_config import DEFAULT_CODE_LIMITS, code_catalog_fingerprint
 from .code_common import OID, CodeStateError, empty_code_state, load_code_state
 from .code_runtime import CodeRunError, bounded_run
+from .code_search import CodeSearchBackend
 
 DEFAULTS = DEFAULT_CODE_LIMITS
 
@@ -63,6 +64,7 @@ class CodeBackend:
         # Never exceed the mail service's configured output/session constraints.
         self.limits["query_output_bytes"] = min(self.limits["query_output_bytes"], cfg.get("limits", {}).get("query_output_bytes", 16 * 1024 * 1024))
         self.local = threading.local()
+        self.search_backend = CodeSearchBackend(cfg)
         self.env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
                     "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_SYSTEM": "/dev/null", "GIT_CONFIG_GLOBAL": "/dev/null",
                     "GIT_ATTR_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0", "GIT_ALLOW_PROTOCOL": "",
@@ -79,6 +81,8 @@ class CodeBackend:
 
     def generation(self):
         code_generation = str(self._state()["generation"])
+        if self.code.get("index", {}).get("enabled", False):
+            return code_generation + ":index:" + self.search_backend.generation()
         return code_generation
 
     @contextmanager
@@ -99,7 +103,7 @@ class CodeBackend:
             except BlockingIOError as exc:
                 raise MirrorError("busy", "Local heavy-I/O work is active; retry later", 429) from exc
             # Admission is only a probe. Never delay a mail indexer for a code
-            # read, or pass a coordinator lock to a Git child. Immutable
+            # read, or pass a coordinator lock to a Git/Zoekt child. Immutable
             # object identities and before/after checkpoints protect readers.
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
         finally:
@@ -108,7 +112,10 @@ class CodeBackend:
         self.local.output_remaining = int(self.limits["query_output_bytes"])
         try:
             self.local.state = self._state()
+            self.local.index_snapshot = self.search_backend.snapshot()
             generation = str(self.local.state["generation"])
+            if self.code.get("index", {}).get("enabled", False):
+                generation += ":index:" + self.local.index_snapshot[1]
             self.local.generation = generation
             # Derive the identity from the captured state, not a second state
             # read: publication between these reads must invalidate the query.
@@ -121,6 +128,7 @@ class CodeBackend:
                 raise MirrorError("stale_code_generation", "Code publication changed during the query; retry", 409)
         finally:
             self.local.state = None
+            self.local.index_snapshot = None
             self.local.generation = None
             self.local.deadline = None
             self.local.output_remaining = None
@@ -155,7 +163,58 @@ class CodeBackend:
             raise MirrorError("code_objects_missing", "Requested published object is unavailable locally", 503)
         return result
 
+    def _run_bridge(self, argv, input_bytes, max_bytes):
+        remaining = self.local.deadline - time.monotonic()
+        budget = min(max_bytes, self.local.output_remaining)
+        if remaining <= 0 or budget < 1024:
+            raise MirrorError("query_output_limit", "No remaining bounded index-query budget", 413)
+        result = bounded_git_run(argv, env=self.env, timeout=remaining, max_bytes=budget,
+                                 memory_bytes=self.limits["query_memory_bytes"], input_bytes=input_bytes)
+        self.local.output_remaining -= len(result.output)
+        return result
 
+    def _indexed_search(self, tree, oid, metadata, query, paths, mode, case_sensitive, limit):
+        result = self.search_backend.search(
+            tree=tree, ref=metadata["requested_ref"], commit=oid, fingerprint=metadata["catalog_fingerprint"],
+            query=query, paths=paths, mode=mode, case_sensitive=case_sensitive, limit=limit,
+            max_line_bytes=self.limits["max_line_bytes"], deadline=self.local.deadline,
+            max_output_bytes=self.local.output_remaining, runner=self._run_bridge,
+            snapshot=self.local.index_snapshot)
+        if result.items is None:
+            if mode == "symbol":
+                raise MirrorError("symbols_unavailable", "Lexical symbols require a matching, verified symbol-enabled index (" + result.fallback_reason + ")", 503)
+            return None, result.fallback_reason
+        # Zoekt indexes symlink target strings. Recover exact Git identities and
+        # enforce our regular-file/size policy before returning any indexed hit.
+        entries = {}
+        for batch in self._batches(dict.fromkeys(item["path"] for item in result.items)):
+            rows, partial = self._entries(tree, oid, batch)
+            if partial:
+                if mode == "symbol":
+                    raise MirrorError("symbols_unavailable", "Cannot verify indexed symbol paths within the exact-Git budget", 503)
+                return None, "index_git_validation_limit"
+            entries.update({entry["path"]: entry for entry in rows if "path" in entry})
+        kept, excluded = [], 0
+        for item in result.items:
+            entry = entries.get(item["path"])
+            if entry is None:
+                if mode == "symbol":
+                    raise MirrorError("symbols_unavailable", "Indexed symbol path does not exist at its published commit", 503)
+                return None, "index_git_path_mismatch"
+            if entry["type"] != "blob" or entry["mode"] not in ("100644", "100755") or entry["size"] > self.limits["max_file_bytes"]:
+                excluded += 1
+                continue
+            item["blob"] = entry["blob"]
+            kept.append(item)
+        reasons = list(result.reasons)
+        if excluded:
+            reasons.append("indexed_hits_excluded")
+        metadata.update(result.metadata)
+        metadata.update({"query": query, "paths": paths, "mode": mode, "case_sensitive": case_sensitive,
+                         "excluded_indexed_hits": excluded,
+                         "policies": {"binary": "exclude", "max_file_bytes": self.limits["max_file_bytes"],
+                                      "max_line_bytes": self.limits["max_line_bytes"], "symlinks_and_gitlinks": "exclude"}})
+        return self._result(kept, metadata, reasons), None
 
     def _catalog_current(self, tree, entry):
         return entry.get("config_fingerprint") == code_catalog_fingerprint(self.trees[tree])
@@ -312,8 +371,8 @@ class CodeBackend:
     def search(self, query, tree, ref=None, paths=None, mode="literal", case_sensitive=True, limit=None):
         if not isinstance(query, str) or not query or len(query.encode("utf-8")) > 4096 or "\x00" in query or "\n" in query:
             raise MirrorError("invalid_query", "Query must be 1..4096 UTF-8 bytes without NUL or newline")
-        if mode not in ("literal", "regex"):
-            raise MirrorError("unsupported_search_mode", "Exact Git search supports literal or POSIX extended regex, not symbols")
+        if mode not in ("literal", "regex", "symbol"):
+            raise MirrorError("unsupported_search_mode", "Search supports literal, POSIX ERE, or optional lexical symbols")
         if mode == "regex" and ("(?" in query or re.search(r"\\[dDsSwWbBAZz1-9]", query)):
             raise MirrorError("unsupported_regex", "Regex dialect is POSIX ERE; PCRE extensions and backreferences are not supported")
         if not isinstance(case_sensitive, bool):
@@ -321,6 +380,10 @@ class CodeBackend:
         paths, limit = self._paths(paths), self._limit(limit)
         with self.read_guard():
             oid, metadata = self._resolve(tree, ref)
+            indexed, fallback = self._indexed_search(tree, oid, metadata, query, paths, mode, case_sensitive, limit)
+            if indexed is not None:
+                return indexed
+            metadata["index_fallback_reason"] = fallback
             entries, reason = self._entries(tree, oid, paths)
             reasons, eligible, exclusions = [reason], {}, {"binary_files": 0, "oversize_files": 0, "non_regular_files": 0, "non_utf8_paths": 0}
             for entry in entries:
@@ -615,9 +678,10 @@ class CodeBackend:
         state_status = "disabled" if not self.enabled else "ready" if ready else "degraded" if available or changed_catalog else "not_ready"
         result = {"enabled": self.enabled, "ready": ready, "available": available, "status": state_status,
                 "code_generation": str(state["generation"]), "engine": "git", "configured_trees": len(self.trees), "trees": rows,
-                "capabilities": {"search": ["literal", "POSIX ERE"], "symbol": False,
+                "code_index": self.search_backend.health(state),
+                "capabilities": {"search": ["literal", "POSIX ERE"], "symbol": "optional_lexical_ctags" if self.code.get("index", {}).get("symbols", False) else False,
                                  "blame": False, "network": False, "memory_bound": "sampled_git_rss_plus_deployment_hard_limit",
-                                 "index_engine": None}}
+                                 "index_engine": "zoekt" if self.code.get("index", {}).get("enabled", False) else None}}
         # Keep degraded diagnostics useful even at the maximum catalog size.
         # Discovery is paginated elsewhere; status must fit the usual envelope.
         budget = max(256, max(512, (self.cfg.get("limits", {}).get("response_bytes", 65536) - 1024) // 3) - 512)

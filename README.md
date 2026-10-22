@@ -365,17 +365,19 @@ Upstream components retain their own licenses. public-inbox source and notices a
 
 Pinned Linux and U-Boot root MAINTAINERS catalogs are included under `config/maintainers`, with commit/hash provenance and upstream notices. The inbox class selects the project catalog. They are inert snapshots, never refreshed on a query; U-Boot board-local catalogs and complex N/K regex classification are not exhaustive.
 
-## Optional local code mirrors
+## Optional local code mirrors and pilot index
 
 An opt-in code catalog adds bounded, exact-revision `code.search`,
 `code.get_file`, `code.log`, and `code.show`, plus catalog/status tools. Mail-only
 configurations keep their existing MCP discovery unchanged. These tools never
-fetch or execute repository content; there is no `code.blame`. Mirrors use the mail index's shared HDD I/O lock and preserve last-good
+fetch or execute repository content; there is no `code.blame`. The separately opt-in Zoekt pilot indexer uses an
+independently enforced hard memory cap and no network. Mirrors use the mail index's shared HDD I/O lock and preserve last-good
 published snapshots on failures.
 
 Start with a U-Boot-only catalog on the existing host and measure before adding
 one Linux ref. The example is disabled and is not a claim that all requested
 upstream refs currently exist. Read [catalog and upstream caveats](docs/code-catalog.md),
 [mirror coordination and resource limits](docs/code-sync.md), and
-[exact-Git tools and operator workflow](docs/code-tools.md)
-before enabling it.
+[exact-Git tools and operator workflow](docs/code-tools.md), and
+[bounded Zoekt pilot, optional lexical symbols, and capacity gates](docs/code-index.md)
+before enabling it. Default-disabled indexing adds no new search port.
