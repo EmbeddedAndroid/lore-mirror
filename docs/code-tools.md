@@ -1,6 +1,6 @@
 # Exact-Git and optional indexed code tools
 
-This is opt-in, local-only code browsing. The separately opt-in Zoekt pilot is described in `code-index.md`; There is no semantic symbol navigation or `code.blame`. The original mail tools remain available. No read tool fetches from the network or starts synchronization.
+This is opt-in, local-only code browsing. The separately opt-in Zoekt pilot is described in `code-index.md`; phase 5 adds independently opt-in [qualified mail/code evidence links](code-links.md). There is no semantic symbol navigation or `code.blame`. The original mail tools remain available. No read tool fetches from the network or starts synchronization.
 
 The example catalog is intent, not a claim that every upstream branch exists. See `code-catalog.md` for verified URL/ref caveats. Keep only U-Boot selected for the first pilot; add one Linux ref only after reviewing measurements and the available HDD/RAM budget. Do not enable all example trees at once on the documented 3891 MiB machine.
 
@@ -25,9 +25,9 @@ All read tools are exposed through existing stdio/HTTP MCP and `POST /api/tools/
 
 Tools return `items`, `partial`, `truncated`, `has_more`, `next_cursor`, bounded counts and exact revision metadata. A limit reached or incomplete scan must not be reported as complete absence. A last page does not erase a partial-coverage flag. A large single result produces an explicit error instead of disappearing.
 
-Pagination reuses bounded in-memory sessions, authenticated cursors and current total transport-envelope limits. Code sessions have a separate pool from ordinary mail sessions, so code queries cannot evict mail cursors. The code defaults are 16 sessions, 8 MiB total serialized retained session bytes (including metadata, not a measured Python heap cap) and a 900-second cursor lifetime, configurable under `code.limits.max_sessions`, `session_bytes` and `cursor_ttl`.
+Pagination reuses bounded in-memory sessions, authenticated cursors and current total transport-envelope limits. Code and mail/code-link sessions have a separate pool from ordinary mail sessions, so code queries cannot evict mail cursors. The code defaults are 16 sessions, 8 MiB total serialized retained session bytes (including metadata, not a measured Python heap cap) and a 900-second cursor lifetime, configurable under `code.limits.max_sessions`, `session_bytes` and `cursor_ttl`.
 
-Mail changes do not invalidate ordinary code cursors. Relevant code or index publication does. Restart, expiry or changed query arguments require restarting the query. A fresh read captures exact published identities after its brief nonblocking lock probe and validates the generation before and after the query rather than mixing old and new revisions. Cursor-only pages never probe or acquire `index.lock`; they read the captured session and validate its generations even while a writer is active. Only one fresh heavy code request per API process is admitted; contention reports busy. Metadata/status queries do not initiate background work.
+Mail changes do not invalidate ordinary code cursors. Relevant code or index publication does; evidence-link cursors also bind mail and evidence generations. Restart, expiry or changed query arguments require restarting the query. A fresh read captures exact published identities after its brief nonblocking lock probe and validates the generation before and after the query rather than mixing old and new revisions. Cursor-only pages never probe or acquire `index.lock`; they read the captured session and validate its generations even while a writer is active. Only one fresh heavy code request per API process is admitted; contention reports busy. Metadata/status queries do not initiate background work.
 
 ## Safety and verification
 

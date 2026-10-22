@@ -4,7 +4,9 @@ Phase 4 adds a separate **one-shot process on the existing `.63` host**, not a
 new machine or worker host. It does not require an SSD or RAM upgrade. It stays
 disabled unless explicitly configured and invoked; normal mail synchronization
 and code reads must never start an index build. No index/search network port is
-exposed. No `code.blame` is added. Mail/code evidence links are a later, independent phase.
+exposed. No `code.blame` is added. The separately enabled phase-5
+[mail/code evidence database](code-links.md) does not require a Zoekt index and
+is not started by this indexer.
 
 ## Scope and configuration
 

@@ -138,10 +138,23 @@ def make_mcp(service):
     def code_list_refs(tree:str,limit:StrictInt=20,cursor:str|None=None)->dict[str,Any]:
         """List published local refs and exact commit identities."""
         return _mcp_call(service,"code.list_refs",{k:v for k,v in locals().items() if k!="service"})
+    def code_related_mail(tree:str,commit:str,ref:str|None=None,limit:StrictInt=20,cursor:str|None=None)->dict[str,Any]:
+        """Read evidence-qualified local mail links for an exact commit, with snapshot reachability. Never proves application."""
+        return _mcp_call(service,"code.related_mail",{k:v for k,v in locals().items() if k!="service"})
+    def mail_related_commits(message_id:str,tree:str,ref:str|None=None,variant:str|None=None,limit:StrictInt=20,cursor:str|None=None)->dict[str,Any]:
+        """Read citation/equivalence candidates for exact mail variants. Reachability is not current effectiveness."""
+        return _mcp_call(service,"mail.related_commits",{k:v for k,v in locals().items() if k!="service"})
     def code_status()->dict[str,Any]:
         """Read code mirror readiness and coverage; never starts work."""
         return _mcp_call(service,"code.status")
-    for name,fn in (("mail.search",search), ("mail.get_message",get_message), ("mail.get_thread",get_thread), ("mail.get_series",get_series), ("mail.in_flight",in_flight), ("mail.was_posted",was_posted), ("mail.list_lists",list_lists), ("mail.status",status), ("issue.report",report), ("issue.get",get), ("issue.list",issue_list), ("code.search",code_search), ("code.get_file",code_get_file), ("code.log",code_log), ("code.show",code_show), ("code.list_trees",code_list_trees), ("code.list_refs",code_list_refs), ("code.status",code_status)):
+    for name,fn in (("mail.search",search),("mail.get_message",get_message),("mail.get_thread",get_thread),
+                    ("mail.get_series",get_series),("mail.in_flight",in_flight),("mail.was_posted",was_posted),
+                    ("mail.list_lists",list_lists),("mail.status",status),("issue.report",report),
+                    ("issue.get",get),("issue.list",issue_list),("code.search",code_search),
+                    ("code.get_file",code_get_file),("code.log",code_log),("code.show",code_show),
+                    ("code.list_trees",code_list_trees),("code.list_refs",code_list_refs),("code.status",code_status),("code.related_mail",code_related_mail),("mail.related_commits",mail_related_commits)):
+        if name in ("code.related_mail","mail.related_commits") and not cfg["code"].get("links",{}).get("enabled",False):
+            continue
         if name.startswith("code.") and not cfg["code"]["enabled"]:
             continue
         mcp.add_tool(fn,name=name,annotations=write if name=="issue.report" else read,structured_output=True)

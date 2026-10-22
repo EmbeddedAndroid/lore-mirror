@@ -40,6 +40,7 @@ class MirrorService:
         Path(self.cfg["issue_dir"]).mkdir(parents=True,exist_ok=True)
         self.backend=FixtureBackend(self.cfg) if self.cfg["backend"]=="fixture" else PublicInboxBackend(self.cfg)
         self._code_backend=None
+        self._code_links=None
         self.code_query_slots=threading.BoundedSemaphore(1)
         self.secret=secrets.token_bytes(32)
         self.sessions={}; self.code_sessions={}; self.mutex=threading.RLock(); self.issue_calls=[]; self.query_slots=threading.BoundedSemaphore(4)
@@ -52,7 +53,8 @@ class MirrorService:
                     "issue.report":self.issue_report,"issue.get":self.issue_get,"issue.list":self.issue_list}
         self.tools.update({"code.search":self.code_search,"code.get_file":self.code_get_file,
             "code.log":self.code_log,"code.show":self.code_show,"code.list_trees":self.code_list_trees,
-            "code.list_refs":self.code_list_refs,"code.status":self.code_status})
+            "code.list_refs":self.code_list_refs,"code.status":self.code_status,
+            "code.related_mail":self.code_related_mail,"mail.related_commits":self.mail_related_commits})
 
     @property
     def code_backend(self):
@@ -67,10 +69,16 @@ class MirrorService:
     def code_backend(self,value):
         self._code_backend=value
 
+    @property
+    def code_links(self):
+        if self._code_links is None:
+            from .code_link_backend import CodeLinkBackend
+            self._code_links=CodeLinkBackend(self.cfg,self.code_backend)
+        return self._code_links
 
     @staticmethod
     def _is_code_operation(operation):
-        return operation.startswith("code.")
+        return operation.startswith("code.") or operation=="mail.related_commits"
 
     def _session_pool(self,operation):
         return self.code_sessions if self._is_code_operation(operation) else self.sessions
@@ -119,7 +127,18 @@ class MirrorService:
             if isinstance(args["limit"],bool) or not isinstance(args["limit"],int) or not lo<=args["limit"]<=hi:
                 raise MirrorError("invalid_limit",f"limit must be {lo}..{hi}")
         try:
-            if name.startswith("mail.") and name!="mail.status":
+            if name in ("code.related_mail","mail.related_commits"):
+                if not self.code_query_slots.acquire(blocking=False):
+                    raise MirrorError("busy", "Local code query concurrency limit reached", 429)
+                try:
+                    with self.read_guard():
+                        before=self._operation_generation(name)
+                        # Cursor pages read only cached bounded results and generations.
+                        result=self.tools[name](**args)
+                        if self._operation_generation(name)!=before:
+                            raise MirrorError("stale_links_generation","Mail/code evidence changed during the query; retry",409)
+                finally: self.code_query_slots.release()
+            elif name.startswith("mail.") and name!="mail.status":
                 if not self.query_slots.acquire(blocking=False):
                     raise MirrorError("busy", "Local query concurrency limit reached", 429)
                 try:
@@ -192,6 +211,8 @@ class MirrorService:
                 "completeness":"relative_to_locally_indexed_mail; see mail.status for sync gaps"}
 
     def _operation_generation(self, operation):
+        if operation in ("code.related_mail","mail.related_commits"):
+            return "mail:"+self.generation()+":code:"+self.code_backend.generation()+":links:"+self.code_links.generation()
         return self.code_backend.generation() if operation.startswith("code.") else self.generation()
 
     def _token(self,session,offset):
@@ -282,14 +303,29 @@ class MirrorService:
     def code_list_refs(self, tree, limit=20, cursor=None):
         return self._code_page("code.list_refs",dict(tree=tree),limit,cursor)
 
+    def _links_page(self, name, params, limit, cursor):
+        if cursor:
+            return self._page(name, params, limit=limit, cursor=cursor)
+        method=self.code_links.related_mail if name=="code.related_mail" else self.code_links.related_commits
+        result=method(**params)
+        return self._page(name,params,result["items"],limit=limit,
+            partial=result.get("partial",False),extra=result.get("metadata",{}))
 
+    def code_related_mail(self, tree, commit, ref=None, limit=20, cursor=None):
+        return self._links_page("code.related_mail",dict(tree=tree,commit=commit,ref=ref),limit,cursor)
 
+    def mail_related_commits(self, message_id, tree, ref=None, variant=None, limit=20, cursor=None):
+        message_id=self._mid(message_id)
+        return self._links_page("mail.related_commits",dict(message_id=message_id,tree=tree,ref=ref,variant=variant),limit,cursor)
 
     def code_status(self):
         if self._code_backend is None and not self.cfg["code"]["enabled"]:
             return {"enabled":False,"ready":False,"available":False,"status":"disabled",
-                    "code_generation":"0","configured_trees":0,"trees":[]}
+                    "code_generation":"0","configured_trees":0,"trees":[],
+                    "links":{"enabled":False,"status":"disabled"}}
         result=self.code_backend.status()
+        result["links"]=(self.code_links.status() if self.cfg["code"]["links"]["enabled"]
+                         else {"enabled":False,"status":"disabled"})
         return result
 
     def search(self,query="",lists=None,class_filter=None,limit=20,cursor=None):

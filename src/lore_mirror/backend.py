@@ -1,7 +1,9 @@
 from __future__ import annotations
 import datetime as dt
+import base64
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import selectors
@@ -99,6 +101,202 @@ TRANSIENT = re.compile(r"DatabaseModified|DatabaseOpeningError|database is locke
 TRANSIENT_ATTEMPTS = 4
 
 
+
+_VARIANT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
+
+
+def _variant_cursor_decode(value):
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value) > 4096:
+        raise MirrorError("invalid_variant_cursor", "Invalid local variant cursor")
+    try:
+        token = json.loads(base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True))
+        if (not isinstance(token, dict) or token.get("version") != 1
+                or any(not isinstance(token.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", token[key])
+                       for key in ("source", "generation"))
+                or any(not isinstance(token.get(key), str) or not _VARIANT_ID.fullmatch(token[key])
+                       for key in ("after", "highwater"))
+                or token["after"] > token["highwater"] or type(token.get("changed")) is not bool):
+            raise ValueError()
+        return token
+    except (ValueError, UnicodeError, RecursionError) as exc:
+        raise MirrorError("invalid_variant_cursor", "Invalid local variant cursor") from exc
+
+
+def _variant_fingerprint(path, cfg, kind, schema):
+    """SQLite epochs detect updates independently of filesystem timestamp ticks.
+
+    Appends and in-place rewrites both dirty a pass. A dirty pass can still make
+    progress, but never reports complete coverage, and restarts at its end. Read
+    only fixed-size headers, never the corpus or a potentially enormous WAL.
+    """
+    try:
+        with path.open("rb") as source:
+            info = os.fstat(source.fileno())
+            header = source.read(100)
+        if len(header) != 100 or header[:16] != b"SQLite format 3\0":
+            raise MirrorError("variant_enumeration_unavailable", "Invalid local SQLite variant source", 503)
+        scope = [(item.get("id"), item.get("newsgroup"), item.get("inbox_path")) for item in cfg.get("lists", [])]
+        identity = {"kind": kind, "path": str(path), "device": info.st_dev, "inode": info.st_ino,
+                    "schema": schema, "scope": scope}
+        # The database header's change counter advances on rollback-journal
+        # commits, including in-place writes with unchanged file size/times.
+        # WAL commits leave it alone, and when the last writer closes, its
+        # checkpoint deletes both sidecars; a later reader recreates them,
+        # usually on the same inodes. The checkpoint's write to the main file
+        # is then the only trace, so its mtime/ctime are epochs as well.
+        epochs = [(info.st_size, info.st_mtime_ns, info.st_ctime_ns, header[24:28].hex(), header[92:96].hex())]
+        for suffix, length in (("-wal", 32), ("-shm", 96)):
+            try:
+                with Path(str(path) + suffix).open("rb") as source:
+                    stat = os.fstat(source.fileno())
+                    prefix = source.read(length)
+                # WAL salts identify resets; size identifies growth. The two
+                # WAL-index commit headers additionally cover appends inside a
+                # reused, preallocated WAL, where salts and size do not change.
+                # Do not include read marks or locks, which readers can mutate.
+                epochs.append((stat.st_dev, stat.st_ino, stat.st_size, prefix.hex()))
+            except FileNotFoundError:
+                epochs.append(None)
+        encode = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encode(identity)).hexdigest(), hashlib.sha256(encode([identity, epochs])).hexdigest()
+    except OSError as exc:
+        raise MirrorError("variant_enumeration_unavailable", "Cannot inspect the local variant source", 503) from exc
+
+
+def _iter_variant_rows(backend, path, kind, after, limit, timeout=None):
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 250:
+        raise MirrorError("invalid_limit", "Variant enumeration limit must be 1..250")
+    cursor = _variant_cursor_decode(after)
+    limits = backend.cfg["limits"]
+    timeout = limits["query_timeout"] if timeout is None else timeout
+    if (isinstance(timeout, bool) or not isinstance(timeout, (int, float))
+            or not math.isfinite(timeout) or not 0 < timeout <= limits["query_timeout"]):
+        raise MirrorError("invalid_timeout", "Variant enumeration timeout must be positive and within the configured query timeout")
+    deadline = time.monotonic() + timeout
+    budget = int(limits["query_output_bytes"])
+    con = None
+    try:
+        # Bind the path before opening SQLite as well as after the transaction:
+        # a replacement between open() and the first stat must not label an old
+        # connection's rows as a new inventory.
+        opening_source, opening_generation = _variant_fingerprint(path, backend.cfg, kind, None)
+        con = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=min(1, timeout))
+        # Metadata only: hostile/corrupt scalar values cannot allocate an
+        # unbounded SQLite result, even when a raw message row is much larger.
+        con.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 256 * 1024)
+        con.execute("PRAGMA query_only=ON")
+        con.execute("PRAGMA trusted_schema=OFF")
+        con.execute("PRAGMA temp_store=MEMORY")
+        con.execute("PRAGMA cache_size=-2048")
+        con.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+        con.execute("BEGIN")
+        schema = con.execute("PRAGMA schema_version").fetchone()[0]
+        source, generation = _variant_fingerprint(path, backend.cfg, kind, schema)
+        begun_source, begun_generation = _variant_fingerprint(path, backend.cfg, kind, None)
+        if begun_source != opening_source:
+            raise MirrorError("stale_variant_cursor", "Variant source was replaced while opening; restart enumeration", 409)
+        if cursor and cursor["source"] != source:
+            raise MirrorError("stale_variant_cursor", "Variant source was replaced or its schema/scope changed; restart enumeration", 409)
+        initial = cursor["generation"] if cursor else generation
+        # WAL writers can commit after schema_version pins the read snapshot
+        # but before either subsequent fingerprint. Those fingerprints agree
+        # while the rows still describe the older snapshot, so compare opening
+        # versus begun generations as well, and carry a dirty pass to its end.
+        changed = opening_generation != begun_generation or bool(cursor and (cursor["changed"] or generation != initial))
+        lower = cursor["after"] if cursor else ""
+        if kind == "public-inbox-xref3":
+            # Force the pinned native OID index: never sort/materialize the whole
+            # corpus and never let a recent-date query stand in for enumeration.
+            maximum = con.execute("SELECT oidbin FROM xref3 INDEXED BY idx_oidbin ORDER BY oidbin DESC LIMIT 1").fetchone()
+            if maximum and (not isinstance(maximum[0], bytes) or len(maximum[0]) not in (20, 32)):
+                raise MirrorError("backend_protocol", "Local variant index contains an invalid blob identity", 503)
+            maximum = maximum[0].hex() if maximum else None
+            highwater = cursor["highwater"] if cursor else maximum
+            rows = [] if highwater is None else con.execute(
+                "SELECT DISTINCT oidbin FROM xref3 INDEXED BY idx_oidbin WHERE oidbin>? AND oidbin<=? ORDER BY oidbin LIMIT ?",
+                (bytes.fromhex(lower), bytes.fromhex(highwater), limit + 1)).fetchall()
+        else:
+            maximum = con.execute("SELECT variant FROM messages ORDER BY variant DESC LIMIT 1").fetchone()
+            highwater = cursor["highwater"] if cursor else maximum[0] if maximum else None
+            rows = [] if highwater is None else con.execute(
+                "SELECT variant,substr(message_id,1,2049),CASE WHEN length(meta)<=65536 THEN meta ELSE NULL END "
+                "FROM messages WHERE variant>? AND variant<=? ORDER BY variant LIMIT ?",
+                (lower, highwater, limit + 1)).fetchall()
+        if highwater is not None and (not isinstance(highwater, str) or not _VARIANT_ID.fullmatch(highwater)):
+            raise MirrorError("backend_protocol", "Local variant index contains an invalid identity", 503)
+        items, used, output_limited = [], 2048, False
+        for row in rows[:limit]:
+            if time.monotonic() >= deadline:
+                raise MirrorError("variant_enumeration_budget", "Variant enumeration exceeded its local time budget", 504)
+            if kind == "public-inbox-xref3":
+                if not isinstance(row[0], bytes) or len(row[0]) not in (20, 32):
+                    raise MirrorError("backend_protocol", "Local variant index contains an invalid blob identity", 503)
+                variant, mid, lists, membership_partial = row[0].hex(), None, set(), False
+                keys = con.execute("SELECT DISTINCT CASE WHEN length(CAST(i.eidx_key AS BLOB))<=4096 "
+                                   "THEN i.eidx_key ELSE NULL END FROM xref3 x INDEXED BY idx_oidbin "
+                                   "JOIN inboxes i ON i.ibx_id=x.ibx_id WHERE x.oidbin=? LIMIT 1001", (row[0],)).fetchall()
+                membership_partial = len(keys) > 1000 or any(not isinstance(record[0], str) for record in keys)
+                groups = {record[0] for record in keys[:1000] if isinstance(record[0], str)}
+                lists = sorted({item["id"] for item in backend.cfg.get("lists", [])
+                                if item.get("newsgroup") in groups or item.get("inbox_path") in groups})
+                item = {"message_id": None, "blob": variant, "variant": variant, "list_ids": lists,
+                        "native_identity": kind + ":" + variant, "memberships_partial": membership_partial}
+            else:
+                variant, mid, raw_meta = row
+                if not isinstance(variant, str) or not _VARIANT_ID.fullmatch(variant):
+                    raise MirrorError("backend_protocol", "Fixture variant index contains an invalid identity", 503)
+                meta = json.loads(raw_meta) if raw_meta is not None else {}
+                lists = meta.get("list_ids", []) if isinstance(meta, dict) else []
+                if not isinstance(lists, list) or any(not isinstance(value, str) for value in lists):
+                    raise MirrorError("backend_protocol", "Fixture variant metadata has invalid memberships", 503)
+                item = {"message_id": mid if isinstance(mid, str) and len(mid.encode("utf-8")) <= 2048 else None,
+                        "blob": None, "variant": variant, "list_ids": lists,
+                        "native_identity": kind + ":" + variant, "memberships_partial": raw_meta is None}
+            size = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            if used + size > budget:
+                if not items:
+                    raise MirrorError("variant_enumeration_output_limit", "One variant metadata row exceeds the local output budget", 413)
+                output_limited = True
+                break
+            items.append(item)
+            used += size
+        source_after, generation_after = _variant_fingerprint(path, backend.cfg, kind, schema)
+        if source_after != source:
+            raise MirrorError("stale_variant_cursor", "Variant source was replaced during enumeration; restart", 409)
+        changed |= generation_after != initial
+        more = output_limited or len(rows) > limit
+        next_cursor = None
+        if more:
+            token = {"version": 1, "source": source, "generation": initial, "after": items[-1]["variant"],
+                     "highwater": highwater, "changed": changed}
+            next_cursor = base64.urlsafe_b64encode(json.dumps(token, separators=(",", ":")).encode()).decode().rstrip("=")
+        result = {"items": items, "next_cursor": next_cursor, "pass_complete": not more,
+                  "complete": not more and not changed, "generation": generation_after,
+                  "initial_generation": initial, "source_identity": source,
+                  "coverage": {"kind": kind, "ordering": "raw_variant_identity_ascending", "highwater": highwater,
+                               "source_changed": changed, "consistent_snapshot": not changed,
+                               "restart_required": not more and changed,
+                               "scope": "locally_indexed_raw_variants_at_pass_start; arrivals or rewrites require a new pass"}}
+        if len(json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode()) > budget:
+            raise MirrorError("variant_enumeration_output_limit", "Variant result exceeds its local output budget", 413)
+        if time.monotonic() >= deadline:
+            raise MirrorError("variant_enumeration_budget", "Variant enumeration exceeded its local time budget", 504)
+        return result
+    except MirrorError:
+        raise
+    except sqlite3.Error as exc:
+        if time.monotonic() >= deadline or "interrupted" in str(exc):
+            raise MirrorError("variant_enumeration_budget", "Variant enumeration exceeded its local SQL budget", 504) from exc
+        raise MirrorError("variant_enumeration_unavailable", "Local variant schema is unavailable or unsupported", 503) from exc
+    except (OSError, ValueError, UnicodeError, RecursionError) as exc:
+        raise MirrorError("backend_protocol", "Cannot validate local variant enumeration metadata", 503) from exc
+    finally:
+        if con is not None:
+            con.set_progress_handler(None, 0)
+            con.close()
+
 class PublicInboxBackend:
     def __init__(self, cfg):
         self.cfg, self.limits = cfg, cfg["limits"]
@@ -118,6 +316,17 @@ class PublicInboxBackend:
                 if attempt == TRANSIENT_ATTEMPTS - 1:
                     raise MirrorError("index_busy", "Index commit in progress; retry shortly", 503) from exc
                 time.sleep(0.2 * (attempt + 1))
+
+    def iter_variants(self, after=None, limit=25, *, timeout=None):
+        """Enumerate every local raw transport variant, never a recent search.
+
+        A content update dirties the pass but does not starve progress. At its
+        end, complete=False and restart_required=True require a fresh pass.
+        """
+        overs = sorted(self.extindex.glob("ei*/over.sqlite3"))
+        if len(overs) != 1:
+            raise MirrorError("variant_enumeration_unavailable", "Enumeration requires exactly one active local extindex overview", 503)
+        return _iter_variant_rows(self, overs[0], "public-inbox-xref3", after, limit, timeout)
 
     def search(self, query, limit, thread_id=None, list_ids=None):
         if list_ids is not None and not list_ids:return [],False
@@ -366,6 +575,9 @@ class FixtureBackend:
                 if meta.get("message_id"):
                     con.execute("INSERT OR REPLACE INTO messages VALUES(?,?,?,?)",(meta["variant"],meta["message_id"],json.dumps(meta),raw))
         return len(files)
+
+    def iter_variants(self, after=None, limit=25, *, timeout=None):
+        return _iter_variant_rows(self, self.db.resolve(), "fixture-raw-sha256", after, limit, timeout)
 
     def _rows(self):
         if not self.db.exists(): raise MirrorError("index_unavailable","Import offline fixtures first",503)

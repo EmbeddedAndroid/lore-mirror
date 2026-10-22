@@ -132,6 +132,26 @@ class SharedCodeStateTests(unittest.TestCase):
             with self.assertRaises(CodeStateError):
                 validate_code_state(self.state)
 
+    def test_all_phase_adapters_reject_writer_only_and_reader_only_corruption(self):
+        from lore_mirror.code_backend import CodeBackend
+        from lore_mirror.code_index import CodeIndexError, _snapshot
+        from lore_mirror.code_links import _snapshots
+        from lore_mirror.code_sync import CodeSyncError, _read_state
+        from lore_mirror.errors import MirrorError
+        code = {"enabled": True, "root_dir": str(self.root), "max_refs": 10,
+                "index": {"pilot_tree": "tiny", "pilot_ref": "refs/heads/main"},
+                "trees": [{"id": "tiny", "index_refs": ["refs/heads/main"]}]}
+        backend = CodeBackend({"data_dir": str(self.root), "code": code})
+        for key, value in (("consecutive_errors", -1), ("status", []), ("started_at", "broken")):
+            state = copy.deepcopy(self.state)
+            state["trees"]["tiny"][key] = value
+            self.write(state)
+            for fn, error in ((backend._state, MirrorError),
+                              (lambda: _read_state(self.path, 10), CodeSyncError),
+                              (lambda: _snapshot(code), CodeIndexError),
+                              (lambda: _snapshots(code), MirrorError)):
+                with self.subTest(key=key, fn=fn), self.assertRaises(error):
+                    fn()
 
 
 class SharedOwnershipTests(unittest.TestCase):
@@ -197,6 +217,15 @@ class SharedOwnershipTests(unittest.TestCase):
 
 
 class SharedIdentityAndStorageTests(unittest.TestCase):
+    def test_one_oid_policy_is_exact_and_shared(self):
+        from lore_mirror import code_backend, code_index, code_link_backend, code_links, code_search, code_sync
+        for module in (code_backend, code_index, code_link_backend, code_links, code_search, code_sync):
+            self.assertIs(module.OID, OID)
+        for length in (40, 64):
+            self.assertIsNotNone(OID.fullmatch("a" * length))
+        for value in ("a" * 39, "a" * 41, "a" * 63, "a" * 65, "A" * 40, "a" * 40 + "\n"):
+            self.assertIsNone(OID.fullmatch(value))
+        self.assertIsNotNone(SHA256.fullmatch("a" * 64))
 
     def test_engine_identity_binds_all_enabled_executables(self):
         identity = {"engine_commit": ENGINE_COMMIT, "indexer_sha256": "a" * 64,

@@ -381,3 +381,10 @@ upstream refs currently exist. Read [catalog and upstream caveats](docs/code-cat
 [exact-Git tools and operator workflow](docs/code-tools.md), and
 [bounded Zoekt pilot, optional lexical symbols, and capacity gates](docs/code-index.md)
 before enabling it. Default-disabled indexing adds no new search port.
+
+A separate, default-disabled [mail/code evidence database](docs/code-links.md)
+adds `code.related_mail` and `mail.related_commits`. Its operator-only
+`code-links` CLI processes bounded local batches under the same heavy-I/O lock.
+It requires an explicit patch-date horizon; citations, patch equivalence, and
+snapshot reachability are evidence, never an applied/merged or still-effective
+guarantee. No additional service or automatic backfill is enabled.

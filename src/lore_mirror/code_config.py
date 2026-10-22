@@ -5,6 +5,7 @@ proof that a branch exists or that any code is ready to search.
 """
 from __future__ import annotations
 
+from datetime import date
 import hashlib
 import json
 import math
@@ -81,8 +82,25 @@ _INDEX_MAXIMA = {
     "max_index_bytes": 8 * 1024 ** 3,
     "max_source_bytes": 4 * 1024 ** 3,
 }
-_CODE_KEYS = {"enabled", "root_dir", "trees", "limits", "max_refs", "min_free_fraction", "index"}
-_TREE_KEYS = {"id", "name", "url", "default_ref", "refs", "tag_patterns", "branch_patterns", "index_refs", "fetch_mode", "manifest_url", "manifest_key", "interval_seconds"}
+DEFAULT_CODE_LINKS = {
+    "enabled": False,
+    "patch_since": None,
+    "batch_commits": 50,
+    "batch_mails": 25,
+    "timeout_seconds": 30,
+    "max_db_bytes": 1024 ** 3,
+    "max_patch_bytes": 8 * 1024 * 1024,
+}
+_LINKS_MAXIMA = {
+    "batch_commits": 500,
+    "batch_mails": 250,
+    "timeout_seconds": 120,
+    "max_db_bytes": 2 * 1024 ** 3,
+    "max_patch_bytes": 16 * 1024 * 1024,
+}
+_CODE_KEYS = {"enabled", "root_dir", "trees", "limits", "max_refs", "min_free_fraction", "index", "links"}
+_TREE_KEYS = {"id", "name", "url", "default_ref", "refs", "tag_patterns", "branch_patterns", "index_refs",
+              "fetch_mode", "manifest_url", "manifest_key", "interval_seconds"}
 _ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
 
 
@@ -223,6 +241,24 @@ def _normalize_index(value, *, trees, code_enabled):
     return index
 
 
+def _normalize_links(value, *, code_enabled):
+    """Bound local evidence work; never invent an operator's coverage horizon."""
+    links = DEFAULT_CODE_LINKS | _mapping(value, "links", set(DEFAULT_CODE_LINKS))
+    if not isinstance(links["enabled"], bool):
+        _invalid("links.enabled must be boolean")
+    for key, maximum in _LINKS_MAXIMA.items():
+        _integer(links[key], "links." + key, maximum=maximum)
+    since = links["patch_since"]
+    if since is not None:
+        if not isinstance(since, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", since):
+            _invalid("links.patch_since must be an explicit YYYY-MM-DD date or null")
+        try:
+            date.fromisoformat(since)
+        except ValueError:
+            _invalid("links.patch_since must be a valid calendar date")
+    if links["enabled"] and (not code_enabled or since is None):
+        _invalid("links.enabled requires code.enabled and an explicit patch_since date")
+    return links
 
 
 def normalize_code_config(value=None, *, data_dir=None):
@@ -315,5 +351,6 @@ def normalize_code_config(value=None, *, data_dir=None):
             _invalid("conditional_refs trees must not configure a grokmirror manifest")
         trees.append(normalized)
     index = _normalize_index(cfg.get("index", {}), trees=trees, code_enabled=enabled)
+    links = _normalize_links(cfg.get("links", {}), code_enabled=enabled)
     return {"enabled": enabled, "root_dir": root, "trees": trees, "limits": limits,
-            "max_refs": max_refs, "min_free_fraction": float(reserve), "index": index}
+            "max_refs": max_refs, "min_free_fraction": float(reserve), "index": index, "links": links}

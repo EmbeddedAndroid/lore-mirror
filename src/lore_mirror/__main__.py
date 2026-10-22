@@ -10,7 +10,7 @@ from .errors import MirrorError
 def main(argv=None):
     parser=argparse.ArgumentParser(prog="lore-mirror")
     sub=parser.add_subparsers(dest="command",required=True)
-    for name in ("serve","stdio","sync","code-sync","code-index","fixture-import","call"):
+    for name in ("serve","stdio","sync","code-sync","code-index","code-links","fixture-import","call"):
         p=sub.add_parser(name);p.add_argument("--config",required=True)
         if name=="serve":p.add_argument("--listen",default=None);p.add_argument("--port",type=int,default=None)
         if name=="code-index":p.add_argument("--preflight",action="store_true")
@@ -21,6 +21,13 @@ def main(argv=None):
     args=parser.parse_args(argv)
     try:
         config=load_config(args.config)
+        if args.command=="code-links":
+            from .code_links import sync_links_once
+            result=sync_links_once(config)
+            print(json.dumps(result))
+            # A bounded batch can make useful progress without exhausting the
+            # declared local horizon; partial is not a failure or global claim.
+            return 0 if result.get("status") in ("ready", "disabled", "partial") else 2
         if args.command=="code-index":
             from .code_index import CodeIndexError, _enforced_memory_limit, index_code_once
             try:
