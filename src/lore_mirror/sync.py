@@ -23,6 +23,8 @@ import time
 import urllib.error
 import urllib.request
 
+from .code_config import normalize_code_config
+
 GIB = 1024 ** 3
 ALLOWED_HOSTS = {"erol.kernel.org"}
 EPOCH_RE = re.compile(r"^/([a-zA-Z0-9][a-zA-Z0-9_.+-]*)/git/(\d+)\.git$")
@@ -325,6 +327,7 @@ def date_bounds(path):
 
 def prepare_config(path):
     config = json.loads(Path(path).read_text())
+    config["code"] = normalize_code_config(config.get("code"), data_dir=config["data_dir"])
     config.setdefault("upstream", "https://erol.kernel.org")
     config.setdefault("manifest_url", config["upstream"].rstrip("/") + "/manifest.js.gz")
     config.setdefault("interval_seconds", 3600)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+from .code_config import normalize_code_config
 from .errors import MirrorError
 
 DEFAULT_LIMITS = {"page_size": 20, "max_page_size": 100, "response_bytes": 65536,
@@ -25,6 +26,7 @@ def load_config(value):
     cfg["limits"]["max_page_size"] = min(int(cfg["limits"]["max_page_size"]), 100)
     cfg["limits"]["response_bytes"] = min(int(cfg["limits"]["response_bytes"]), 65536)
     cfg["limits"]["scan_limit"] = min(int(cfg["limits"]["scan_limit"]), 10000)
+    cfg["code"] = normalize_code_config(cfg.get("code"), data_dir=cfg["data_dir"])
     cfg.setdefault("lists", [])
     if len(cfg["lists"]) > 1000:
         raise MirrorError("invalid_config", "Too many inboxes")

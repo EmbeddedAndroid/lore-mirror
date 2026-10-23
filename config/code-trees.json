@@ -1,0 +1,112 @@
+{
+  "code": {
+    "enabled": false,
+    "min_free_fraction": 0.3,
+    "max_refs": 10000,
+    "trees": [
+      {
+        "id": "linux-mainline",
+        "name": "Linux mainline",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git",
+        "refs": [
+          "refs/heads/master"
+        ],
+        "default_ref": "refs/heads/master",
+        "tag_patterns": [
+          {
+            "pattern": "refs/tags/v*",
+            "keep": null
+          }
+        ],
+        "fetch_mode": "grokmirror_manifest",
+        "interval_seconds": 3600
+      },
+      {
+        "id": "linux-next",
+        "name": "Linux next",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git",
+        "refs": [
+          "refs/heads/master"
+        ],
+        "default_ref": "refs/heads/master",
+        "tag_patterns": [
+          {
+            "pattern": "refs/tags/next-*",
+            "keep": 3
+          }
+        ],
+        "fetch_mode": "grokmirror_manifest",
+        "interval_seconds": 3600
+      },
+      {
+        "id": "linux-stable",
+        "name": "Linux current LTS branches",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git",
+        "refs": [
+          "refs/heads/linux-6.18.y",
+          "refs/heads/linux-6.12.y",
+          "refs/heads/linux-6.6.y",
+          "refs/heads/linux-6.1.y",
+          "refs/heads/linux-5.15.y",
+          "refs/heads/linux-5.10.y"
+        ],
+        "default_ref": "refs/heads/linux-6.18.y",
+        "tag_patterns": [],
+        "fetch_mode": "grokmirror_manifest",
+        "interval_seconds": 21600
+      },
+      {
+        "id": "linux-qcom",
+        "name": "Qualcomm Linux integration and latest release branches",
+        "url": "https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux.git",
+        "refs": [
+          "refs/heads/for-next"
+        ],
+        "default_ref": "refs/heads/for-next",
+        "tag_patterns": [],
+        "fetch_mode": "grokmirror_manifest",
+        "interval_seconds": 3600,
+        "branch_patterns": [
+          {
+            "pattern": "refs/heads/arm64-for-*",
+            "keep": 1
+          },
+          {
+            "pattern": "refs/heads/drivers-for-*",
+            "keep": 1
+          },
+          {
+            "pattern": "refs/heads/clk-for-*",
+            "keep": 1
+          }
+        ]
+      },
+      {
+        "id": "u-boot",
+        "name": "U-Boot mainline and next",
+        "url": "https://git.u-boot-project.org/u-boot/u-boot.git",
+        "refs": [
+          "refs/heads/master",
+          "refs/heads/next"
+        ],
+        "default_ref": "refs/heads/master",
+        "tag_patterns": [],
+        "fetch_mode": "conditional_refs",
+        "interval_seconds": 3600
+      },
+      {
+        "id": "u-boot-qcom",
+        "name": "U-Boot Qualcomm custodian",
+        "url": "https://git.u-boot-project.org/u-boot/custodians/u-boot-snapdragon.git",
+        "refs": [
+          "refs/heads/qcom-main",
+          "refs/heads/qcom-next"
+        ],
+        "default_ref": "refs/heads/qcom-main",
+        "tag_patterns": [],
+        "fetch_mode": "conditional_refs",
+        "interval_seconds": 3600
+      }
+    ]
+  }
+}
