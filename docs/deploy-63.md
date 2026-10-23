@@ -109,6 +109,30 @@ indexing keeps `index_dirty` and is indexed again at its next full-pass turn;
 status reports `unsafe_index` until then. Priority work uses the same index lock,
 per-inbox checkpoints, and storage guards as ordinary full-pass work.
 
+### Unclean extindex exits
+
+Stopping the daemon (for example `docker compose up -d` recreating sync) sends
+SIGTERM to the native index leader only: public-inbox shard workers ignore it,
+and the leader's git helpers must stay alive until it has flushed, so the
+process group is not signalled. The coordinator waits
+`index_stop_grace_seconds` (30, below the 45 s Compose stop grace) before
+killing the group. A leader that exits cleanly in time needs no repair.
+
+public-inbox commits SQLite, including its last-commit checkpoint, before the
+Xapian shards. A writer killed between the two (power cut, OOM, an overrun
+grace) leaves documents in over.sqlite3 that are missing from Xapian, and a
+resumed run does not revisit them. Before every extindex job the coordinator
+records `extindex_floor` (highest over document and xref3 row) and sets
+`extindex_running`; a clean exit clears it. When the next extindex job finds
+it still set, it queues every document past the floor in public-inbox's
+persistent `eidxq` (and clears a stale `eidxq_lock`, which cannot match a
+restarted container), and public-inbox reindexes those documents when a run
+completes. `extindex_recovery` records the floor and count. The floor only
+advances while the queue is empty, so a crash during repair is covered too.
+Known limit: a message removed from an inbox in the lost window can leave a
+Xapian document without an over row; readers skip it, so only result counts
+are affected.
+
 ## Monitoring and recovery
 
 ```sh

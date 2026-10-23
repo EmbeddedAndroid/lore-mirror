@@ -268,12 +268,18 @@ def _aggregate_rss(pid):
         selected = expanded
 
 
-def run_command(argv, config, log_path, *, env=None):
-    """No shell; kill the whole job if headroom, deadline or RSS budget is crossed."""
+def run_command(argv, config, log_path, *, env=None, graceful=False):
+    """No shell; stop the job if headroom, deadline or RSS budget is crossed.
+
+    A graceful job is a native index writer. It is asked to quit through its
+    leader only: public-inbox shard workers ignore SIGTERM, and the leader's
+    git helpers must survive until it has written its last commit checkpoint.
+    """
     started = time.monotonic()
     peak = 0
     timeout = config.get("job_timeout_seconds", 12 * 3600)
     memory_limit = config.get("job_memory_limit_bytes", 6 * GIB)
+    stop_grace = config.get("index_stop_grace_seconds", 30) if graceful else 15
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # Rotate between jobs so the child keeps a stable output descriptor.
@@ -289,6 +295,20 @@ def run_command(argv, config, log_path, *, env=None):
         log.flush()
         child = subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
             env=env, start_new_session=True)
+
+        def stop(wait):
+            try:
+                if graceful:
+                    os.kill(child.pid, signal.SIGTERM)
+                else:
+                    os.killpg(child.pid, signal.SIGTERM)
+                child.wait(timeout=wait)
+            except subprocess.TimeoutExpired:
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait()
+            except ProcessLookupError:
+                child.wait()
+
         try:
             while child.poll() is None:
                 peak = max(peak, _aggregate_rss(child.pid))
@@ -299,29 +319,63 @@ def run_command(argv, config, log_path, *, env=None):
                 elif peak > memory_limit:
                     error = "job aggregate RSS limit exceeded"
                 if error:
-                    os.killpg(child.pid, signal.SIGTERM)
-                    try:
-                        child.wait(timeout=15)
-                    except subprocess.TimeoutExpired:
-                        os.killpg(child.pid, signal.SIGKILL)
-                        child.wait()
+                    stop(stop_grace)
                     break
                 time.sleep(.25)
             rc = child.wait()
-        except BaseException:
+        except BaseException as exc:
             if child.poll() is None:
-                os.killpg(child.pid, signal.SIGTERM)
-                try:
-                    child.wait(timeout=15)
-                except subprocess.TimeoutExpired:
-                    os.killpg(child.pid, signal.SIGKILL)
-                    child.wait()
+                stop(stop_grace)
+            # A graceful writer that exited 0 wrote its own checkpoint.
+            exc.lore_clean_stop = graceful and child.returncode == 0
             raise
     result = {"seconds": round(time.monotonic() - started, 3),
         "peak_aggregate_rss_bytes_sampled": peak, "returncode": rc, "log": str(log_path)}
     if error or rc:
         raise SyncError((error or f"command exited {rc}") + f"; see {log_path}")
     return result
+
+
+def _extindex_db(config):
+    return Path(config["extindex"]) / "ei15" / "over.sqlite3"
+
+
+def extindex_floor(config):
+    """Rows past this point may lack Xapian documents if the writer dies.
+
+    public-inbox commits SQLite (with its last-commit checkpoint) before the
+    Xapian shards, so a killed writer can leave over.sqlite3 ahead of Xapian
+    and a resumed run will not revisit those messages.
+    """
+    db = _extindex_db(config)
+    if not db.exists():
+        return {"over_num": 0, "xref3_rowid": 0, "eidxq": 0}
+    with contextlib.closing(sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=300)) as conn:
+        num = conn.execute("SELECT COALESCE(MAX(num),0) FROM over").fetchone()[0]
+        rowid = conn.execute("SELECT COALESCE(MAX(rowid),0) FROM xref3").fetchone()[0]
+        queued = conn.execute("SELECT COUNT(*) FROM eidxq").fetchone()[0]
+    return {"over_num": num, "xref3_rowid": rowid, "eidxq": queued}
+
+
+def requeue_after_unclean_exit(config, floor):
+    """Queue every document touched past floor for Xapian reindexing.
+
+    The caller holds the coordinator index lock, so no native writer is
+    running and a remaining eidxq_lock is stale (its PID and host identity
+    do not survive a container restart). eidxq persists across aborted
+    runs and is drained when an extindex run completes.
+    """
+    db = _extindex_db(config)
+    if not db.exists():
+        return 0
+    with contextlib.closing(sqlite3.connect(db, timeout=300)) as conn:
+        before = conn.execute("SELECT COUNT(*) FROM eidxq").fetchone()[0]
+        conn.execute("INSERT OR IGNORE INTO eidxq(docid) SELECT num FROM over WHERE num>?", (floor["over_num"],))
+        conn.execute("INSERT OR IGNORE INTO eidxq(docid) SELECT docid FROM xref3 WHERE rowid>?", (floor["xref3_rowid"],))
+        conn.execute("UPDATE eidx_meta SET val='' WHERE key='eidxq_lock'")
+        after = conn.execute("SELECT COUNT(*) FROM eidxq").fetchone()[0]
+        conn.commit()
+    return after - before
 
 
 def _tool(config, name):
@@ -382,6 +436,9 @@ def prepare_config(path):
     if config["min_free_fraction"] < .30 or config["min_free_fraction"] >= 1:
         raise SyncError("pilot requires at least 30% free-space headroom")
     config.setdefault("index_batch_size", "16m")
+    config.setdefault("index_stop_grace_seconds", 30)
+    if not 1 <= config["index_stop_grace_seconds"] <= 40:
+        raise SyncError("index_stop_grace_seconds must be 1 to 40 seconds")
     if not re.fullmatch(r"[1-9][0-9]*[kmg]?", str(config["index_batch_size"])):
         raise SyncError("invalid index_batch_size")
     unknown = set(config["priority_lists"]) - set(ids)
@@ -452,6 +509,35 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
     (curl_home / ".curlrc").write_text("user-agent = " + json.dumps(config["user_agent"]) + "\n")
     env["CURL_HOME"] = str(curl_home)
     errors = set()
+
+    def run_index(step, argv, log):
+        """Run one native index writer; extindex runs keep a repair floor."""
+        if step == "extindex":
+            prepare_extindex()
+        try:
+            result = run_command(argv, config, log, env=env, graceful=True)
+        except BaseException as exc:
+            if step == "extindex" and getattr(exc, "lore_clean_stop", False):
+                state["extindex_running"] = False
+                atomic_json(state_path, state)
+            raise
+        if step == "extindex":
+            state["extindex_running"] = False
+        return result
+
+    def prepare_extindex():
+        # The shared extindex, not one inbox, is what an unclean exit damages.
+        if state.get("extindex_running"):
+            floor = state.get("extindex_floor") or {"over_num": 0, "xref3_rowid": 0}
+            state["extindex_recovery"] = {"at": utcnow(), "floor": floor,
+                "requeued_documents": requeue_after_unclean_exit(config, floor)}
+        else:
+            current = extindex_floor(config)
+            # Queued repairs are only safe once drained: keep the older floor.
+            if not state.get("extindex_floor") or not current["eidxq"]:
+                state["extindex_floor"] = current
+        state["extindex_running"] = True
+        atomic_json(state_path, state)
 
     def record_error(ident, exc, step=None):
         row = state["lists"].setdefault(ident, {})
@@ -542,10 +628,12 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
                 run_command([_tool(config, "public-inbox-init"), "-V2", "-Lbasic", "-j1", "--ng=" + item["newsgroup"],
                     ident, item["inbox_path"], "https://lore.kernel.org/" + item.get("canonical_id", ident) + "/",
                     item.get("address", ident + "@lists.linux.dev")], config, root / "logs" / f"init-{ident}.log", env=env)
-                row["basic_index"] = run_command([_tool(config, "public-inbox-index"), "-j1", "--batch-size=" + config["index_batch_size"], "--no-multi-pack-index",
-                    item["inbox_path"]], config, root / "logs" / f"basic-{ident}.log", env=env)
-                row["extindex"] = run_command([_tool(config, "public-inbox-extindex"), "-j1", "--batch-size=" + config["index_batch_size"],
-                    "--no-multi-pack-index", config["extindex"], item["inbox_path"]], config, root / "logs" / f"extindex-{ident}.log", env=env)
+                row["basic_index"] = run_index("basic_index", [_tool(config, "public-inbox-index"), "-j1",
+                    "--batch-size=" + config["index_batch_size"], "--no-multi-pack-index",
+                    item["inbox_path"]], root / "logs" / f"basic-{ident}.log")
+                row["extindex"] = run_index("extindex", [_tool(config, "public-inbox-extindex"), "-j1",
+                    "--batch-size=" + config["index_batch_size"], "--no-multi-pack-index", config["extindex"],
+                    item["inbox_path"]], root / "logs" / f"extindex-{ident}.log")
                 git = tree_bytes(Path(item["inbox_path"]) / "git")
                 full = tree_bytes(item["inbox_path"])
                 count = message_count(item["inbox_path"])
