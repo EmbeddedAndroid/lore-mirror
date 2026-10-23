@@ -186,6 +186,13 @@ If capacity projection or observed free space threatens 100 GB, stop sync:
 ssh -F /dev/null root@<host> 'cd /srv/lore-mirror && docker compose stop sync'
 ```
 
+Resolve a local issue once its evidence is in hand (the API container owns
+the issue database):
+
+```sh
+ssh -F /dev/null root@<host> 'cd /srv/lore-mirror && docker compose exec -T api python -m lore_mirror issue-resolve --config /config/pilot.json ISSUE_ID --resolution-file -' < evidence.txt
+```
+
 Keep API/gateway and existing data for diagnosis. The progress command uses
 the API container so it also works while sync is stopped; its cgroup fields
 then describe API memory, not historical sync peaks. Do not delete epochs or

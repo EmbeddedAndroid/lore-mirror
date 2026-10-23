@@ -124,7 +124,7 @@ No arguments. Reports backend type, native-syntax support, index presence/genera
 
 ## Local issue tools
 
-Issue reports are stored in the configured local issue SQLite database. They do not email maintainers, open a GitHub issue, contact archive administrators or leave the host. Reports are immutable in this API; there is no update/delete endpoint.
+Issue reports are stored in the configured local issue SQLite database. They do not email maintainers, open a GitHub issue, contact archive administrators or leave the host. Reports are immutable through the API; there is no update/delete endpoint. An operator on the host can mark an open issue resolved, with up to 4000 bytes of evidence, using `python -m lore_mirror issue-resolve --config CONFIG ISSUE_ID --resolution-file FILE` (`-` reads stdin). The issue then reports `status` `resolved`, `resolved_at` and `resolution`, and `issue.list` shows the stored status; a second resolution is rejected with `issue_not_open`.
 
 ### `issue.report`
 

@@ -734,12 +734,27 @@ class MirrorService:
         if not row:raise MirrorError("not_found","Local issue not found",404)
         return {"id":row[0],"created":row[1],"category":row[2],"title":row[3],"description":row[4],**json.loads(row[5])}
 
+    def issue_resolve(self,issue_id,resolution):
+        """Operator-only (host CLI): mark a local issue resolved with its evidence."""
+        if not isinstance(resolution,str) or not 1<=len(resolution.encode())<=4000:raise MirrorError("invalid_resolution","Resolution 1..4000 bytes")
+        with self.mutex,sqlite3.connect(self.issue_db,timeout=5) as db:
+            current=self.issue_get(issue_id)
+            if current.get("status")!="open":raise MirrorError("issue_not_open","Local issue is already resolved",409)
+            context={k:current[k] for k in ("message_ids","index_generation","local_only")}
+            context.update(status="resolved",resolved_at=utcnow(),resolution=resolution)
+            if len(encoded(current|context))>max(512,(self.limits["response_bytes"]-1024)//3):
+                raise MirrorError("issue_response_limit","Resolution exceeds the readable issue budget; shorten it",413)
+            changed=db.execute("UPDATE issues SET context=? WHERE id=? AND json_extract(context,'$.status')='open'",
+                               (json.dumps(context),issue_id)).rowcount
+            if not changed:raise MirrorError("issue_not_open","Local issue is already resolved",409)
+        return self.issue_get(issue_id)
+
     def issue_list(self,limit=20,cursor=None):
         if isinstance(limit,bool) or not isinstance(limit,int) or not 1<=limit<=100:raise MirrorError("invalid_limit","limit must be 1..100")
         if cursor and not re.fullmatch(r"[0-9a-f]{32}",cursor):raise MirrorError("invalid_cursor","Invalid issue cursor")
         # IDs sort lexically and existing reports are immutable. New issues need a fresh list to appear.
         with sqlite3.connect(self.issue_db) as db:
-            rows=db.execute("SELECT id,created,category,title FROM issues WHERE id>? ORDER BY id LIMIT ?",(cursor or "",limit+1)).fetchall()
+            rows=db.execute("SELECT id,created,category,title,json_extract(context,'$.status') FROM issues WHERE id>? ORDER BY id LIMIT ?",(cursor or "",limit+1)).fetchall()
         page=rows[:limit]
-        return {"items":[{"id":r[0],"created":r[1],"category":r[2],"title":r[3],"status":"open"} for r in page],
+        return {"items":[{"id":r[0],"created":r[1],"category":r[2],"title":r[3],"status":r[4] or "open"} for r in page],
                 "has_more":len(rows)>limit,"next_cursor":page[-1][0] if len(rows)>limit else None,"local_only":True}
