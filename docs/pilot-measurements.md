@@ -96,8 +96,8 @@ A machine preserving 30% free space needs capacity at least `(steady_state + tem
 
 The current full-manifest message count is unknown. Let N_large and N_small be summed per-inbox message-ID counts in the two content/size strata, including cross-post memberships. The following rates are measured sample ranges per one million such IDs, not a corpus-size claim or confidence interval.
 
-- large: 2 completed samples; 16.47–21.16 GiB of Git/basic/marginal-shared-index per million message IDs; 2.65–2.92 index hours per million.
-- small: 2 completed samples; 20.59–41.38 GiB of Git/basic/marginal-shared-index per million message IDs; 2.11–2.61 index hours per million.
+- large: 2 completed samples; 16.47-21.16 GiB of Git/basic/marginal-shared-index per million message IDs; 2.65-2.92 index hours per million.
+- small: 2 completed samples; 20.59-41.38 GiB of Git/basic/marginal-shared-index per million message IDs; 2.11-2.61 index hours per million.
 
 Conditional steady-state scenario in bytes: N_large × measured_large_bytes_per_ID + N_small × measured_small_bytes_per_ID + application/derived-store bytes. Index-time scenario in seconds uses the corresponding per-ID time rates. Keep the per-stratum N values unknown until measured; do not substitute a historical self-reported corpus count as today’s count.
 
@@ -122,6 +122,6 @@ No clone of either deferred namespace was started. A runtime clone guard prevent
 
 The measurement host was Debian 13 with 9 visible logical CPUs and 9.73 GiB visible RAM. Effective container CPU/memory quotas and utilization were not established. Indexing was serialized; the sum of measured initial basic/full-index stages was 9,697.525 seconds (2.69 hours), excluding fetches, software installation and coordination. The largest sampled index-process-tree RSS was 1,902,362,624 bytes (1.77 GiB). This is not a claim that the entire host or simultaneous query service fits in that amount.
 
-For a fresh pilot host, use 64-bit Linux, Python 3.11+, Git, Perl and the pinned public-inbox/Xapian dependencies in README. A practical starting allocation is 2–4 logical CPUs and 8 GiB RAM for one index worker plus the bounded query service; performance at that CPU allocation has not been benchmarked. The shipped Compose limits are 4 GiB/2 CPUs for sync and 2 GiB/2 CPUs for the API. Native processes are not constrained by those Compose limits.
+For a fresh pilot host, use 64-bit Linux, Python 3.11+, Git, Perl and the pinned public-inbox/Xapian dependencies in README. A practical starting allocation is 2-4 logical CPUs and 8 GiB RAM for one index worker plus the bounded query service; performance at that CPU allocation has not been benchmarked. The shipped Compose limits are 4 GiB/2 CPUs for sync and 2 GiB/2 CPUs for the API. Native processes are not constrained by those Compose limits.
 
 For disk, the measured corpus alone needs 24.61 GiB capacity to preserve 30% free space. The illustrative additional-index-copy scenario needs 44.35 GiB before OS/application data, growth and other maintenance. A 64 GiB data volume is a reasonable starting point for this four-list pilot with that illustrative workspace, not a guarantee of future retention or a measured rebuild peak. Tyler still chooses the host. The current workspace fits the corpus, but does not have room for a full additional index copy while keeping its reserve.

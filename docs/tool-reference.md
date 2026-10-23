@@ -130,9 +130,9 @@ Issue reports are stored in the configured local issue SQLite database. They do 
 
 Required arguments:
 
-- `title`: 1–200 characters.
-- `description`: 1–12,000 UTF-8 bytes.
-- `idempotency_key`: 8–128 characters, stable across retries of the same report.
+- `title`: 1-200 characters.
+- `description`: 1-12,000 UTF-8 bytes.
+- `idempotency_key`: 8-128 characters, stable across retries of the same report.
 
 Optional arguments:
 
