@@ -33,6 +33,18 @@ def clip(text, byte_limit):
     return raw[:byte_limit].decode("utf-8", "ignore"),len(raw)>byte_limit
 
 
+def import_activity(row):
+    """One-line summary, for example 'importing linux-arm-msm 176938/317572'."""
+    def number(value):return str(value) if isinstance(value,int) and not isinstance(value,bool) else "?"
+    text=f"importing {clip(row.get('inbox'),200)[0]} {number(row.get('done'))}/{number(row.get('total'))}"
+    if row.get("phase")!="extindex":text+=f" ({clip(row.get('phase'),40)[0]})"
+    rate=row.get("rate_per_hour")
+    if isinstance(rate,(int,float)) and not isinstance(rate,bool):
+        text+=f" at {round(rate)}/h"
+        if isinstance(row.get("eta"),str):text+=f", ETA {clip(row['eta'],40)[0]}"
+    return text+f" as of {clip(row.get('sampled_at'),40)[0]}"
+
+
 class MirrorService:
     def __init__(self, config):
         self.cfg=load_config(config); self.limits=self.cfg["limits"]
@@ -648,6 +660,10 @@ class MirrorService:
         # Operational state can be large. No local filesystem paths or arbitrary error payloads escape.
         safe={k:state.get(k) for k in ("generation","updating","unsafe_index","status","cycle_started_at","cycle_finished_at","next_run_at","pending_lists","last_success","last_indexed_at","last_error","last_error_at","last_error_step","stage") if k in state}
         if "last_error" in safe:safe["last_error"]=clip(safe["last_error"],1000)[0]
+        importing=state.get("importing")
+        if isinstance(importing,dict) and isinstance(importing.get("inbox"),str):
+            safe["importing"]={k:importing.get(k) for k in ("inbox","phase","done","total","slices","rate_per_hour","rate_basis","eta","started_at","sampled_at")}
+            safe["activity"]=import_activity(safe["importing"])
         history=state.get("error_history")
         if isinstance(history,list):
             safe["error_history"]=[{"error":clip(str(h.get("error")),300)[0],**{k:h.get(k) for k in ("at","step","cleared_at","cleared_by")}}

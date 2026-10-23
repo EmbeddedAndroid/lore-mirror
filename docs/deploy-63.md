@@ -171,6 +171,13 @@ ssh -F /dev/null root@<host> 'cd /srv/lore-mirror && docker compose logs --tail=
 curl --fail http://<host>:8765/api/health
 ```
 
+`progress.py` and `mail.status` report a running first import as `importing`
+(inbox, phase, done/total, rate per hour and ETA, sampled at slice
+boundaries) with a one-line `activity`; `progress.py` adds `live_done`, a
+direct count from the shared index. Both show the current `last_error` and
+the recent `error_history`. A sampled rate is the extindex memberships added
+during the last slice divided by its run time.
+
 The internal disk guard checks every 250 ms while native jobs run and stops
 expansion at 30% reserve. A blocked/error row is retained with its native log.
 If capacity projection or observed free space threatens 100 GB, stop sync:

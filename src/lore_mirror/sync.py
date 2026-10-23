@@ -395,6 +395,21 @@ def requeue_after_unclean_exit(config, floor):
     return after - before
 
 
+def import_progress(config, item):
+    """Extindex memberships done and basic-indexed messages for one inbox."""
+    total = message_count(item["inbox_path"])
+    db = _extindex_db(config)
+    if not db.exists():
+        return 0, total
+    try:
+        with contextlib.closing(sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=60)) as conn:
+            done = conn.execute("SELECT COUNT(*) FROM xref3 WHERE ibx_id=(SELECT ibx_id FROM inboxes WHERE eidx_key=?)",
+                (item["newsgroup"],)).fetchone()[0]
+    except sqlite3.Error:
+        done = None
+    return done, total
+
+
 def _tool(config, name):
     prefix = config.get("public_inbox_bin_dir")
     return str(Path(prefix) / name) if prefix else name
@@ -536,9 +551,12 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
         """Run one native index job, in slices during ordinary full-pass work."""
         slice_seconds = None if in_priority or not full else config["index_slice_seconds"]
         total = {"seconds": 0, "peak_aggregate_rss_bytes_sampled": 0, "slices": 0}
+        importing = not row.get("indexed_at") and not in_priority
         while True:
             if step == "extindex":
                 prepare_extindex()
+            if importing:
+                before = report_import(item, step, total["slices"])
             try:
                 result = run_command(argv, config, log, env=env, slice_seconds=slice_seconds, graceful=True)
             except BaseException as exc:
@@ -551,10 +569,40 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
             total.update(seconds=round(total["seconds"] + result["seconds"], 3), returncode=result["returncode"],
                 peak_aggregate_rss_bytes_sampled=max(total["peak_aggregate_rss_bytes_sampled"],
                     result["peak_aggregate_rss_bytes_sampled"]), slices=total["slices"] + 1, log=result.get("log"))
+            if importing:
+                report_import(item, step, total["slices"], before, result["seconds"])
             if not result.get("sliced"):
+                if importing and step == "extindex":
+                    state.pop("importing", None)
                 return total
             row[step] = dict(total, completed=False)
             between_slices(row)
+
+    def report_import(item, step, slices, before=None, seconds=None):
+        """Sample first-import progress at slice boundaries for status readers."""
+        previous = state.get("importing") or {}
+        if step == "extindex":
+            done, total = import_progress(config, item)
+        else:
+            done, total = message_count(item["inbox_path"]), None
+        same = previous.get("inbox") == item["id"]
+        report = {"inbox": item["id"], "phase": step, "done": done, "total": total, "slices": slices,
+            "sampled_at": utcnow(), "started_at": previous.get("started_at") if same else utcnow(),
+            "rates": dict(previous.get("rates") or {}) if same else {}}
+        rate = basis = None
+        if before and seconds and done is not None and before["done"] is not None and done >= before["done"]:
+            rate, basis = (done - before["done"]) * 3600 / seconds, "last slice"
+            report["rates"][step] = rate
+        elif report["rates"].get(step):
+            rate, basis = report["rates"][step], "earlier slice"
+        if rate:
+            report.update(rate_per_hour=round(rate, 1), rate_basis=basis)
+            if total is not None and done is not None:
+                report["eta"] = dt.datetime.fromtimestamp(time.time() + max(0, total - done) / rate * 3600,
+                    dt.timezone.utc).isoformat()
+        state["importing"] = report
+        atomic_json(state_path, state)
+        return report
 
     def prepare_extindex():
         # The shared extindex, not one inbox, is what an unclean exit damages.
@@ -587,6 +635,8 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
         row = state["lists"].setdefault(ident, {})
         step = step or {"fetching": "fetch", "indexing": "index"}.get(row.get("status"), "preflight")
         set_error(row, exc, step=step, limit=5)
+        if (state.get("importing") or {}).get("inbox") == ident:
+            state.pop("importing")
         row.update(status="blocked" if "storage" in str(exc) or "capacity" in str(exc) else "error",
             retry_count=row.get("retry_count", 0) + 1,
             next_retry_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
@@ -779,6 +829,9 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
     if state["status"] == "ready" and not state["unsafe_index"]:
         state["last_success"] = state["cycle_finished_at"]
         clear_error(state, "cycle")
+    # Priority-only cycles see only priority lists; deselection needs a full pass.
+    if full and (state.get("importing") or {}).get("inbox") not in {item["id"] for item in config["lists"]}:
+        state.pop("importing", None)
     atomic_json(state_path, state)
     history_path = root / "state" / "observations.json"
     history = json.loads(history_path.read_text()) if history_path.exists() else []
