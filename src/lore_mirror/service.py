@@ -658,7 +658,7 @@ class MirrorService:
             try: state=json.loads(p.read_text())
             except ValueError:state={"error":"invalid sync state"}
         # Operational state can be large. No local filesystem paths or arbitrary error payloads escape.
-        safe={k:state.get(k) for k in ("generation","updating","unsafe_index","status","cycle_started_at","cycle_finished_at","next_run_at","pending_lists","last_success","last_indexed_at","last_error","last_error_at","last_error_step","stage") if k in state}
+        safe={k:state.get(k) for k in ("generation","updating","unsafe_index","status","cycle_started_at","cycle_finished_at","next_run_at","pending_lists","last_success","last_indexed_at","last_error","last_error_at","last_error_step","stage","last_priority_refresh_at","last_priority_refresh_status","next_priority_refresh_at") if k in state}
         if "last_error" in safe:safe["last_error"]=clip(safe["last_error"],1000)[0]
         importing=state.get("importing")
         if isinstance(importing,dict) and isinstance(importing.get("inbox"),str):
@@ -677,6 +677,17 @@ class MirrorService:
             if age < -60:raise ValueError("future checkpoint")
             freshness.update(age_seconds=max(0,round(age,1)),stale=age>2*interval)
         except (KeyError,ValueError,TypeError,AttributeError):freshness["reason"]="No valid successful-sync checkpoint"
+        # A first full pass can take weeks; priority lists refresh within it.
+        priority={"last_refresh_at":state.get("last_priority_refresh_at"),"status":state.get("last_priority_refresh_status"),
+                  "age_seconds":None,"stale":None,"stale_after_seconds":2*interval,"lists":list(self.cfg.get("priority_lists") or [])}
+        try:
+            checkpoint=dt.datetime.fromisoformat(state["last_priority_refresh_at"].replace("Z","+00:00"))
+            if checkpoint.tzinfo is None:raise ValueError("timezone missing")
+            age=(dt.datetime.now(dt.timezone.utc)-checkpoint).total_seconds()
+            if age < -60:raise ValueError("future checkpoint")
+            priority.update(age_seconds=max(0,round(age,1)),stale=age>2*interval or priority["status"]!="ready")
+        except (KeyError,ValueError,TypeError,AttributeError):priority["reason"]="No valid priority refresh checkpoint"
+        if priority["lists"]:freshness["priority"]=priority
         daemon_path=Path(self.cfg["data_dir"])/"daemon-state.json";daemon={}
         if daemon_path.exists():
             try:

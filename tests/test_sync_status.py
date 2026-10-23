@@ -222,5 +222,38 @@ class StatusErrorFieldTests(unittest.TestCase):
         self.assertEqual(len(sync['error_history'][0]['error']), 300)
 
 
+class PriorityFreshnessTests(unittest.TestCase):
+    def status(self, state, priority_lists=('u-boot',)):
+        import datetime as dt
+        with tempfile.TemporaryDirectory() as tmp:
+            service = MirrorService({'data_dir': tmp, 'backend': 'fixture', 'priority_lists': list(priority_lists)})
+            atomic_json(Path(tmp) / 'sync-state.json', state)
+            return service.status()
+
+    def ago(self, seconds):
+        import datetime as dt
+        return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds)).isoformat()
+
+    def test_recent_ready_refresh_is_fresh_without_a_completed_pass(self):
+        result = self.status({'status': 'syncing', 'last_priority_refresh_at': self.ago(600),
+            'last_priority_refresh_status': 'ready', 'next_priority_refresh_at': 'N'})
+        priority = result['freshness']['priority']
+        self.assertIsNone(result['freshness']['stale'])
+        self.assertFalse(priority['stale'])
+        self.assertEqual(priority['lists'], ['u-boot'])
+        self.assertAlmostEqual(priority['age_seconds'], 600, delta=30)
+        self.assertEqual(result['sync']['next_priority_refresh_at'], 'N')
+
+    def test_old_partial_or_missing_refresh_is_stale_or_unknown(self):
+        self.assertTrue(self.status({'last_priority_refresh_at': self.ago(7300),
+            'last_priority_refresh_status': 'ready'})['freshness']['priority']['stale'])
+        self.assertTrue(self.status({'last_priority_refresh_at': self.ago(60),
+            'last_priority_refresh_status': 'partial'})['freshness']['priority']['stale'])
+        unknown = self.status({'last_priority_refresh_at': 'garbage'})['freshness']['priority']
+        self.assertIsNone(unknown['stale'])
+        self.assertIn('reason', unknown)
+        self.assertNotIn('priority', self.status({}, priority_lists=())['freshness'])
+
+
 if __name__ == '__main__':
     unittest.main()
