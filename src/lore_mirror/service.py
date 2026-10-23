@@ -646,8 +646,12 @@ class MirrorService:
             try: state=json.loads(p.read_text())
             except ValueError:state={"error":"invalid sync state"}
         # Operational state can be large. No local filesystem paths or arbitrary error payloads escape.
-        safe={k:state.get(k) for k in ("generation","updating","unsafe_index","status","cycle_started_at","cycle_finished_at","next_run_at","pending_lists","last_success","last_indexed_at","last_error","stage") if k in state}
+        safe={k:state.get(k) for k in ("generation","updating","unsafe_index","status","cycle_started_at","cycle_finished_at","next_run_at","pending_lists","last_success","last_indexed_at","last_error","last_error_at","last_error_step","stage") if k in state}
         if "last_error" in safe:safe["last_error"]=clip(safe["last_error"],1000)[0]
+        history=state.get("error_history")
+        if isinstance(history,list):
+            safe["error_history"]=[{"error":clip(str(h.get("error")),300)[0],**{k:h.get(k) for k in ("at","step","cleared_at","cleared_by")}}
+                for h in history[-5:] if isinstance(h,dict)]
         interval=float(self.cfg.get("interval_seconds",3600))
         freshness={"last_success_at":state.get("last_success"),"age_seconds":None,"stale":None,"stale_after_seconds":2*interval}
         try:

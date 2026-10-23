@@ -92,6 +92,18 @@ return to the priority interval after a successful attempt.
 After a failed cycle (for example DNS not yet up after a power cut) the daemon
 retries after `retry_seconds` (60, 120, 300, then 900 s), capped at the
 interval, and returns to the normal schedule after the first good cycle.
+Until the next full pass is due, those retries are priority-only cycles. A
+coordinator error stays in `last_error` (with `last_error_at`, the first
+occurrence, and `last_error_step`) only until a later success of the same
+kind: a manifest or DNS failure clears on the next successful cycle-start or
+priority manifest fetch, and any other cycle failure clears when a cycle
+completes. It then moves to `error_history` with `cleared_at` and
+`cleared_by`, so a long import no longer reports a failure that ended hours
+ago, while a failure that recurs later in every cycle stays visible.
+Per-inbox errors follow the same rule: fetch and preflight failures clear on
+the next successful fetch, index failures when the inbox is indexed again.
+Errors recorded before steps were tracked clear on the next success of any
+kind.
 Containers restart with Docker (`unless-stopped`). An inbox interrupted while
 indexing keeps `index_dirty` and is indexed again at its next full-pass turn;
 status reports `unsafe_index` until then. Priority work uses the same index lock,

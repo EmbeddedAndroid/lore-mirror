@@ -59,6 +59,37 @@ def atomic_json(path, value):
         os.close(dfd)
 
 
+def set_error(record, error, *, step, limit=20):
+    """Record the current failure and the step that raised it.
+
+    An unresolved older failure moves to history.
+    """
+    if record.get("last_error") and record["last_error"] != str(error):
+        clear_error(record, "superseded", limit=limit)
+    if record.get("last_error") != str(error):
+        record["last_error_at"] = utcnow()
+    record.update(last_error=str(error), last_error_step=step)
+
+
+def clear_error(record, success, *, steps=None, limit=20):
+    """A later success of the failed step's kind proves the condition is gone.
+
+    steps names the failed steps this success disproves; None clears any.
+    Errors recorded without a step predate step tracking and always clear.
+    """
+    if not record.get("last_error"):
+        record.pop("last_error_at", None)
+        record.pop("last_error_step", None)
+        return
+    failed = record.get("last_error_step")
+    if steps is not None and failed is not None and failed not in steps:
+        return
+    history = record.get("error_history") or []
+    history.append({"error": record.pop("last_error"), "at": record.pop("last_error_at", None),
+        "step": record.pop("last_error_step", None), "cleared_at": utcnow(), "cleared_by": success})
+    record["error_history"] = history[-limit:]
+
+
 def tree_bytes(path):
     apparent = allocated = 0
     for base, _, files in os.walk(path):
@@ -386,7 +417,15 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
         if state["last_priority_refresh_at"] else time.time())
     priority_errors = state.get("priority_consecutive_errors", 0)
     atomic_json(state_path, state)
-    manifest = fetch_manifest(config, state) if full else None
+    manifest = None
+    if full:
+        try:
+            manifest = fetch_manifest(config, state)
+        except Exception as exc:
+            exc.lore_step = "manifest"
+            raise
+        clear_error(state, "manifest fetch", steps={"manifest"})
+        atomic_json(state_path, state)
     env = dict(os.environ)
     for key, value in config.get("sync_env", config.get("query_env", {})).items():
         if key not in {"PATH", "PERL5LIB", "LD_LIBRARY_PATH", "PERL_INLINE_DIRECTORY", "PERL5OPT"}:
@@ -414,10 +453,12 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
     env["CURL_HOME"] = str(curl_home)
     errors = set()
 
-    def record_error(ident, exc):
+    def record_error(ident, exc, step=None):
         row = state["lists"].setdefault(ident, {})
+        step = step or {"fetching": "fetch", "indexing": "index"}.get(row.get("status"), "preflight")
+        set_error(row, exc, step=step, limit=5)
         row.update(status="blocked" if "storage" in str(exc) or "capacity" in str(exc) else "error",
-            last_error=str(exc), retry_count=row.get("retry_count", 0) + 1,
+            retry_count=row.get("retry_count", 0) + 1,
             next_retry_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
         errors.add(ident)
 
@@ -426,7 +467,8 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
         row = state["lists"].setdefault(ident, {})
         epochs = sorted(k for k in manifest if k.split("/")[1] == ident)
         if not epochs:
-            row.update(status="blocked", last_error="namespace absent from validated manifest")
+            set_error(row, "namespace absent from validated manifest", step="manifest", limit=5)
+            row.update(status="blocked")
             errors.add(ident)
             return
         fingerprints = {k: manifest[k].get("fingerprint") for k in epochs}
@@ -474,7 +516,7 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
             previous_git = tree_bytes(Path(item["inbox_path"]) / "git")["allocated"]
             previous_index = tree_bytes(config["extindex"])["allocated"]
             previous_count = message_count(item["inbox_path"]) or 0
-            row.update(status="fetching", last_attempt_at=utcnow(), last_error=None)
+            row.update(status="fetching", last_attempt_at=utcnow())
             atomic_json(state_path, state)
             mirror_manifest = root / "state" / f"mirror-{ident}.js.gz"
             row["fetch"] = run_command([_tool(config, "public-inbox-clone"), "-j" + str(config["max_workers"]),
@@ -483,6 +525,7 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
             actual_epochs = sorted("/" + ident + "/git/" + p.name for p in (Path(item["inbox_path"]) / "git").glob("*.git"))
             if actual_epochs != epochs:
                 raise SyncError("native clone did not produce every selected epoch")
+            clear_error(row, "fetch", steps={"fetch", "preflight", "manifest"}, limit=5)
             row.update(status="indexing", fetched_at=utcnow(), fetched_fingerprints=fingerprints,
                 fetched_refs=_refs(item["inbox_path"]))
             atomic_json(state_path, state)
@@ -524,6 +567,7 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
                     "is_hourly_observation": bool(row.get("indexed_at")) and elapsed_observation is not None and elapsed_observation >= 3590,
                     "note": ("bootstrap deltas are not hourly growth estimates" if not row.get("indexed_at") else "Local incremental change; catch-up and backfills may affect this observation.")}
                 row.update(status="ready", index_dirty=False, indexed_at=utcnow(), indexed_fingerprints=fingerprints, retry_count=0)
+                clear_error(row, "index", limit=5)
                 state["generation"] += 1
                 state["last_indexed_at"] = row["indexed_at"]
                 errors.discard(ident)
@@ -555,8 +599,9 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
             manifest = fetch_manifest(config, state)
         except Exception as exc:
             for item in priority:
-                record_error(item["id"], exc)
+                record_error(item["id"], exc, step="manifest")
         else:
+            clear_error(state, "priority manifest fetch", steps={"manifest"})
             for item in priority:
                 sync_list(item, manifest)
         failed = any(item["id"] in errors for item in priority)
@@ -593,7 +638,7 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
         pending_lists=sorted(errors), next_run_at=dt.datetime.fromtimestamp(time.time() + config["interval_seconds"], dt.timezone.utc).isoformat())
     if state["status"] == "ready" and not state["unsafe_index"]:
         state["last_success"] = state["cycle_finished_at"]
-        state.pop("last_error", None)
+        clear_error(state, "cycle")
     atomic_json(state_path, state)
     history_path = root / "state" / "observations.json"
     history = json.loads(history_path.read_text()) if history_path.exists() else []
@@ -679,7 +724,8 @@ def run_sync(config_path, once=True):
                     state_path = root / "sync-state.json"
                     state = json.loads(state_path.read_text()) if state_path.exists() else {"lists": {}}
                     state["unsafe_index"] = any(r.get("index_dirty") for r in state.get("lists", {}).values())
-                    state.update(status="error", updating=any(r.get("index_dirty") for r in state.get("lists", {}).values()), last_error=str(exc),
+                    set_error(state, exc, step=getattr(exc, "lore_step", "cycle"))
+                    state.update(status="error", updating=any(r.get("index_dirty") for r in state.get("lists", {}).values()),
                         cycle_finished_at=utcnow(), pending_lists=[r["id"] for r in cycle_config["lists"]])
                     atomic_json(state_path, state)
                     if once:

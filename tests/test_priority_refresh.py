@@ -11,7 +11,7 @@ from unittest import mock
 from lore_mirror.sync import SyncError, atomic_json, prepare_config, run_sync, sync_once
 
 
-class PriorityRefreshTests(unittest.TestCase):
+class RefreshHarness(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -95,6 +95,8 @@ class PriorityRefreshTests(unittest.TestCase):
     def clones(self):
         return [ident for step, ident in self.commands if step == 'clone']
 
+
+class PriorityRefreshTests(RefreshHarness):
     def test_mid_pass_refreshes_only_completed_clean_priorities(self):
         self.names = ['hot', 'slow', 'other', 'cold', 'dirty', 'tail']
         self.priority = ['hot', 'other', 'cold', 'dirty']

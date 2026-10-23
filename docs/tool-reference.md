@@ -120,7 +120,7 @@ Pages the configured local list catalog with IDs, aliases, classes, newsgroup na
 
 ### `mail.status`
 
-No arguments. Reports backend type, native-syntax support, index presence/generation, configured limits, local-only/write boundaries, authentication caveat and available synchronization state. Includes last successful-sync age and `freshness.stale` after two configured intervals (two hours by default); missing or invalid checkpoints yield unknown, not fresh. Recorded daemon schedule/state is exposed with an explicit warning that it is not a live process probe. Consult per-list synchronization checkpoints for actual completeness and freshness. A newly selected inbox may be configured but not yet indexed.
+No arguments. Reports backend type, native-syntax support, index presence/generation, configured limits, local-only/write boundaries, authentication caveat and available synchronization state. Includes last successful-sync age and `freshness.stale` after two configured intervals (two hours by default); missing or invalid checkpoints yield unknown, not fresh. Recorded daemon schedule/state is exposed with an explicit warning that it is not a live process probe. `sync.last_error` is the current unresolved coordinator failure, with `last_error_at` when it was first seen; it clears when a later step of the same kind succeeds (a manifest fetch for manifest and DNS failures, a completed cycle for anything else), and up to five resolved errors remain in `sync.error_history` with the failed `step`, `cleared_at` and `cleared_by`. Consult per-list synchronization checkpoints for actual completeness and freshness. A newly selected inbox may be configured but not yet indexed.
 
 ## Local issue tools
 
