@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-import test_native_e2e as _native
+from tests import test_native_e2e as _native
 from lore_mirror.service import MirrorService
 
 

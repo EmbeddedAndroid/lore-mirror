@@ -6,7 +6,7 @@ import hashlib
 import unittest
 from unittest.mock import patch
 
-import test_native_e2e as _native
+from tests import test_native_e2e as _native
 from lore_mirror.errors import MirrorError
 from lore_mirror.semantics import message_header_ids, parse_message
 

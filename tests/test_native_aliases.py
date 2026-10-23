@@ -3,8 +3,8 @@ import hashlib
 import json
 from pathlib import Path
 import unittest
-import test_native_e2e as _native
-from test_native_e2e import IMPORT_PERL
+from tests import test_native_e2e as _native
+from tests.test_native_e2e import IMPORT_PERL
 from lore_mirror.errors import MirrorError
 FIXTURE=Path(__file__).parent/'fixtures/alias-reproduction'
 MANIFEST=json.loads((FIXTURE/'manifest.json').read_text())

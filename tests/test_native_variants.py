@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 import unittest
-import test_native_e2e as _native
-from test_native_e2e import FIXTURE, IMPORT_PERL
+from tests import test_native_e2e as _native
+from tests.test_native_e2e import FIXTURE, IMPORT_PERL
 
 class NativeVariantTests(unittest.TestCase):
     run_native=classmethod(_native.NativePublicInboxE2ETests.run_native.__func__)

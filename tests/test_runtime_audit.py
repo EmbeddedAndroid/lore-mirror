@@ -290,7 +290,7 @@ class RuntimeAuditStdioTests(unittest.TestCase):
 class RuntimeAuditNativeTests(unittest.TestCase):
     def test_native_long_subject_degrades_and_globs_keep_candidates(self):
         # Reuse only the isolated setup helper, not the live pilot configuration.
-        from test_native_e2e import NativePublicInboxE2ETests as Native, IMPORT_PERL
+        from tests.test_native_e2e import NativePublicInboxE2ETests as Native, IMPORT_PERL
         Native.setUpClass()
         try:
             path = Native.root / "long-subject-audit.eml"
