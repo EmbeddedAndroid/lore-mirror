@@ -71,13 +71,14 @@ No lore web searches, message downloads or web scraping are used.
 The sync daemon starts a full pass over every selected inbox once per
 `interval_seconds` (3600, start to start). Between full passes it refreshes
 `priority_lists` every `priority_interval_seconds` (300). During a full pass,
-the daemon also checks that interval after each inbox and, when due, checks a
-fresh manifest and refreshes priority inboxes before resuming the pass. Only
-inboxes with a completed first index (`indexed_at` set and `index_dirty` clear)
-are eligible for priority refreshes. Unindexed or interrupted inboxes wait for
-their full-pass turn. A single long clone or index can delay a refresh until
-that job's inbox finishes; refreshes do not run concurrently with full-pass work.
-Full passes keep their start-to-start schedule, with a short pause if overdue.
+the daemon also checks that interval at the start of the pass and after each
+inbox and, when due, checks a fresh manifest and refreshes priority inboxes (in
+`priority_lists` order) before resuming the pass. Only inboxes with a completed
+first index (`indexed_at` set and `index_dirty` clear) are eligible for priority
+refreshes. Unindexed inboxes wait for their full-pass turn; an interrupted
+import (`index_dirty`) resumes first in the next pass. Refreshes never run
+concurrently with full-pass work. Full passes keep their start-to-start
+schedule, with a short pause if overdue.
 
 Both `daemon-state.json` and `sync-state.json` record `last_priority_refresh_at`
 and `last_priority_refresh_status` as soon as a priority attempt finishes, even
@@ -105,9 +106,37 @@ the next successful fetch, index failures when the inbox is indexed again.
 Errors recorded before steps were tracked clear on the next success of any
 kind.
 Containers restart with Docker (`unless-stopped`). An inbox interrupted while
-indexing keeps `index_dirty` and is indexed again at its next full-pass turn;
+indexing keeps `index_dirty` and resumes first in the next full pass;
 status reports `unsafe_index` until then. Priority work uses the same index lock,
 per-inbox checkpoints, and storage guards as ordinary full-pass work.
+
+### Sliced imports
+
+A large inbox's first index can take days (linux-arm-msm's extindex of 317,572
+messages runs at roughly 3,500 messages per hour on this host). Full-pass
+`public-inbox-index` and `public-inbox-extindex` jobs therefore run in slices
+of `index_slice_seconds` (3600). At the end of a slice the coordinator sends
+SIGTERM to the native leader process only, as when the daemon stops (see
+below). public-inbox treats that as a graceful quit: it finishes queued work,
+records each epoch's last indexed commit and commits SQLite and Xapian. A
+leader that has not exited after `index_slice_grace_seconds` (900) is killed
+and the inbox is recorded as failed. After a clean slice the index lock is
+released, due priority refreshes run, and the same job restarts; it continues
+from the recorded commits rather than from the beginning. The inbox stays
+`index_dirty` (and status `unsafe_index`) until its import ends. Priority
+refreshes and priority-only cycles never slice; they are bounded by
+`job_timeout_seconds`, which otherwise bounds each slice rather than a whole
+import. A slice must outlast native start-up: SIGTERM before public-inbox has
+installed its quit handler ends the job with a signal, which counts as an
+unclean exit.
+
+A sliced import completes no run until its last slice, so after an unclean
+exit the first completed run is usually a priority refresh between slices: it
+reindexes the whole repair queue (up to a slice's worth of documents) without
+slicing, which can delay that refresh by up to about a slice. If the daemon is
+stopped while a slice is already flushing, or while an error is stopping a
+job, the two waits can exceed the Compose grace; Docker then kills the job and
+the next run repairs it as an unclean exit.
 
 ### Unclean extindex exits
 

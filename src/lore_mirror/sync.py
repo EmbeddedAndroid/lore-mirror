@@ -268,17 +268,20 @@ def _aggregate_rss(pid):
         selected = expanded
 
 
-def run_command(argv, config, log_path, *, env=None, graceful=False):
+def run_command(argv, config, log_path, *, env=None, slice_seconds=None, graceful=False):
     """No shell; stop the job if headroom, deadline or RSS budget is crossed.
 
     A graceful job is a native index writer. It is asked to quit through its
     leader only: public-inbox shard workers ignore SIGTERM, and the leader's
     git helpers must survive until it has written its last commit checkpoint.
+    With slice_seconds the leader is asked to quit after that long; a clean
+    exit then returns {"sliced": True} and the caller reruns the same job.
     """
     started = time.monotonic()
     peak = 0
     timeout = config.get("job_timeout_seconds", 12 * 3600)
     memory_limit = config.get("job_memory_limit_bytes", 6 * GIB)
+    slice_grace = config.get("index_slice_grace_seconds", 900)
     stop_grace = config.get("index_stop_grace_seconds", 30) if graceful else 15
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -290,6 +293,7 @@ def run_command(argv, config, log_path, *, env=None, graceful=False):
                 previous.replace(f"{log_path}.{number + 1}")
         log_path.replace(f"{log_path}.1")
     error = None
+    sliced_at = None
     with log_path.open("ab") as log:
         log.write((json.dumps({"at": utcnow(), "argv": argv}) + "\n").encode())
         log.flush()
@@ -312,12 +316,23 @@ def run_command(argv, config, log_path, *, env=None, graceful=False):
         try:
             while child.poll() is None:
                 peak = max(peak, _aggregate_rss(child.pid))
+                now = time.monotonic()
                 if storage_available(config["data_dir"], config["min_free_fraction"]) < 256 * 1024 ** 2:
                     error = "storage guard: preserving configured free-space headroom"
-                elif time.monotonic() - started > timeout:
+                elif now - started > timeout:
                     error = "job deadline exceeded"
                 elif peak > memory_limit:
                     error = "job aggregate RSS limit exceeded"
+                elif sliced_at is not None and now - sliced_at > slice_grace:
+                    error = "slice did not stop within index_slice_grace_seconds"
+                    os.killpg(child.pid, signal.SIGKILL)
+                    child.wait()
+                    break
+                elif slice_seconds and sliced_at is None and now - started >= slice_seconds:
+                    sliced_at = now
+                    log.write((json.dumps({"at": utcnow(), "slice_end_requested": True}) + "\n").encode())
+                    log.flush()
+                    os.kill(child.pid, signal.SIGTERM)
                 if error:
                     stop(stop_grace)
                     break
@@ -333,6 +348,8 @@ def run_command(argv, config, log_path, *, env=None, graceful=False):
         "peak_aggregate_rss_bytes_sampled": peak, "returncode": rc, "log": str(log_path)}
     if error or rc:
         raise SyncError((error or f"command exited {rc}") + f"; see {log_path}")
+    if sliced_at is not None:
+        result["sliced"] = True
     return result
 
 
@@ -436,9 +453,13 @@ def prepare_config(path):
     if config["min_free_fraction"] < .30 or config["min_free_fraction"] >= 1:
         raise SyncError("pilot requires at least 30% free-space headroom")
     config.setdefault("index_batch_size", "16m")
+    config.setdefault("index_slice_seconds", 3600)
+    config.setdefault("index_slice_grace_seconds", 900)
     config.setdefault("index_stop_grace_seconds", 30)
-    if not 1 <= config["index_stop_grace_seconds"] <= 40:
-        raise SyncError("index_stop_grace_seconds must be 1 to 40 seconds")
+    if not 60 <= config["index_slice_seconds"] <= config.get("job_timeout_seconds", 12 * 3600):
+        raise SyncError("index_slice_seconds must be between 60 and job_timeout_seconds")
+    if not 1 <= config["index_slice_grace_seconds"] <= 3600 or not 1 <= config["index_stop_grace_seconds"] <= 40:
+        raise SyncError("index grace periods must be 1 to 3600 (slice) and 1 to 40 (stop) seconds")
     if not re.fullmatch(r"[1-9][0-9]*[kmg]?", str(config["index_batch_size"])):
         raise SyncError("invalid index_batch_size")
     unknown = set(config["priority_lists"]) - set(ids)
@@ -509,21 +530,31 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
     (curl_home / ".curlrc").write_text("user-agent = " + json.dumps(config["user_agent"]) + "\n")
     env["CURL_HOME"] = str(curl_home)
     errors = set()
+    in_priority = False
 
-    def run_index(step, argv, log):
-        """Run one native index writer; extindex runs keep a repair floor."""
-        if step == "extindex":
-            prepare_extindex()
-        try:
-            result = run_command(argv, config, log, env=env, graceful=True)
-        except BaseException as exc:
-            if step == "extindex" and getattr(exc, "lore_clean_stop", False):
+    def run_index(item, row, step, argv, log):
+        """Run one native index job, in slices during ordinary full-pass work."""
+        slice_seconds = None if in_priority or not full else config["index_slice_seconds"]
+        total = {"seconds": 0, "peak_aggregate_rss_bytes_sampled": 0, "slices": 0}
+        while True:
+            if step == "extindex":
+                prepare_extindex()
+            try:
+                result = run_command(argv, config, log, env=env, slice_seconds=slice_seconds, graceful=True)
+            except BaseException as exc:
+                if step == "extindex" and getattr(exc, "lore_clean_stop", False):
+                    state["extindex_running"] = False
+                    atomic_json(state_path, state)
+                raise
+            if step == "extindex":
                 state["extindex_running"] = False
-                atomic_json(state_path, state)
-            raise
-        if step == "extindex":
-            state["extindex_running"] = False
-        return result
+            total.update(seconds=round(total["seconds"] + result["seconds"], 3), returncode=result["returncode"],
+                peak_aggregate_rss_bytes_sampled=max(total["peak_aggregate_rss_bytes_sampled"],
+                    result["peak_aggregate_rss_bytes_sampled"]), slices=total["slices"] + 1, log=result.get("log"))
+            if not result.get("sliced"):
+                return total
+            row[step] = dict(total, completed=False)
+            between_slices(row)
 
     def prepare_extindex():
         # The shared extindex, not one inbox, is what an unclean exit damages.
@@ -538,6 +569,19 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
                 state["extindex_floor"] = current
         state["extindex_running"] = True
         atomic_json(state_path, state)
+
+    def between_slices(row):
+        # The inbox stays dirty: readers and status keep treating it as unsafe.
+        state.update(stage="between_slices")
+        atomic_json(state_path, state)
+        fcntl.flock(index_lock, fcntl.LOCK_UN)
+        try:
+            refresh_priority()
+        finally:
+            fcntl.flock(index_lock, fcntl.LOCK_EX)
+            row["status"] = "indexing"
+            state.update(updating=True, unsafe_index=True, stage="indexing")
+            atomic_json(state_path, state)
 
     def record_error(ident, exc, step=None):
         row = state["lists"].setdefault(ident, {})
@@ -628,10 +672,10 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
                 run_command([_tool(config, "public-inbox-init"), "-V2", "-Lbasic", "-j1", "--ng=" + item["newsgroup"],
                     ident, item["inbox_path"], "https://lore.kernel.org/" + item.get("canonical_id", ident) + "/",
                     item.get("address", ident + "@lists.linux.dev")], config, root / "logs" / f"init-{ident}.log", env=env)
-                row["basic_index"] = run_index("basic_index", [_tool(config, "public-inbox-index"), "-j1",
+                row["basic_index"] = run_index(item, row, "basic_index", [_tool(config, "public-inbox-index"), "-j1",
                     "--batch-size=" + config["index_batch_size"], "--no-multi-pack-index",
                     item["inbox_path"]], root / "logs" / f"basic-{ident}.log")
-                row["extindex"] = run_index("extindex", [_tool(config, "public-inbox-extindex"), "-j1",
+                row["extindex"] = run_index(item, row, "extindex", [_tool(config, "public-inbox-extindex"), "-j1",
                     "--batch-size=" + config["index_batch_size"], "--no-multi-pack-index", config["extindex"],
                     item["inbox_path"]], root / "logs" / f"extindex-{ident}.log")
                 git = tree_bytes(Path(item["inbox_path"]) / "git")
@@ -669,22 +713,24 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
             record_error(ident, exc)
         atomic_json(state_path, state)
 
-    def refresh_priority(force=False):
-        nonlocal last_priority_refresh, priority_errors, manifest
+    def refresh_priority(force=False, fresh_manifest=None):
+        nonlocal last_priority_refresh, priority_errors, manifest, in_priority
         delay = (next_delay(config, priority_errors, None, time.time()) if priority_errors
             else config["priority_interval_seconds"])
         if not force and time.time() - last_priority_refresh < delay:
             return
-        priority = [item for item in config["lists"] if item["id"] in config["priority_lists"]
+        order = {ident: number for number, ident in enumerate(config["priority_lists"])}
+        priority = sorted((item for item in config["lists"] if item["id"] in order
             and state["lists"].get(item["id"], {}).get("indexed_at")
-            and not state["lists"][item["id"]].get("index_dirty")]
+            and not state["lists"][item["id"]].get("index_dirty")), key=lambda item: order[item["id"]])
         if not priority:
             if force:
                 state["next_priority_refresh_at"] = dt.datetime.fromtimestamp(
                     time.time() + config["priority_interval_seconds"], dt.timezone.utc).isoformat()
             return
+        in_priority = True
         try:
-            manifest = fetch_manifest(config, state)
+            manifest = fresh_manifest or fetch_manifest(config, state)
         except Exception as exc:
             for item in priority:
                 record_error(item["id"], exc, step="manifest")
@@ -692,6 +738,8 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
             clear_error(state, "priority manifest fetch", steps={"manifest"})
             for item in priority:
                 sync_list(item, manifest)
+        finally:
+            in_priority = False
         failed = any(item["id"] in errors for item in priority)
         priority_errors = priority_errors + 1 if failed else 0
         last_priority_refresh = time.time()
@@ -712,8 +760,12 @@ def _sync_once_locked(config, index_lock, *, full=True, daemon=None):
             atomic_json(root / "daemon-state.json", daemon)
 
     if full:
-        # Small lists first provide an end-to-end measurement before admitting large lists.
-        for item in sorted(config["lists"], key=lambda x: x.get("size_class", x.get("class")) != "small"):
+        if config["priority_lists"]:
+            refresh_priority(fresh_manifest=manifest)
+        # Resume interrupted imports first. Small lists then provide an
+        # end-to-end measurement before admitting large lists.
+        for item in sorted(config["lists"], key=lambda x: (not state["lists"].get(x["id"], {}).get("index_dirty"),
+                x.get("size_class", x.get("class")) != "small")):
             sync_list(item, manifest)
             if config["priority_lists"]:
                 refresh_priority()

@@ -3,9 +3,10 @@
 A synthetic v2 inbox is imported and basic-indexed, then the shared
 extindex is built through the sync coordinator's run_command. A SIGKILL of
 the whole process group models a power cut; the coordinator's repair queue
-must restore Xapian. The final extindex must hold exactly the inbox's own
-(article number, blob) pairs, once, with matching over, xref3 and Xapian
-documents.
+must restore Xapian. Sliced runs must leave a monotonically growing,
+checkpointed index, with a second inbox indexed between slices. The final
+extindex must hold exactly the inbox's own (article number, blob) pairs,
+once, with matching over, xref3 and Xapian documents.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ import unittest
 from lore_mirror.sync import extindex_floor, requeue_after_unclean_exit, run_command
 from tests import test_native_e2e as native
 
-MESSAGES = 3000
+MESSAGES = 6000
 XAPIAN_DOCIDS_PERL = r"""
 use strict;
 use Search::Xapian;
@@ -65,7 +66,9 @@ def query(db, sql, *args):
         return conn.execute(sql, args).fetchall()
 
 
-class NativeExtindexTests(unittest.TestCase):
+class NativeSliceTests(unittest.TestCase):
+    slice_seconds = None
+
     def setUp(self):
         native.require_native()
         self.temp = tempfile.TemporaryDirectory(prefix="lore-native-slices-")
@@ -85,6 +88,13 @@ class NativeExtindexTests(unittest.TestCase):
             "min_free_fraction": 0, "job_timeout_seconds": 600,
             "index_slice_grace_seconds": 120, "index_stop_grace_seconds": 30}
         self.big = self.inbox("big", MESSAGES)
+        if NativeSliceTests.slice_seconds is None:
+            # SIGTERM before public-inbox installs its quit handler kills perl
+            # outright, so a slice must outlast native start-up on this host.
+            probe = self.inbox("probe", 1)
+            started = time.monotonic()
+            self.native("public-inbox-extindex", "-L", "full", "-j1", str(self.root / "probe-extindex"), str(probe))
+            NativeSliceTests.slice_seconds = max(1.0, 2 * (time.monotonic() - started))
 
     def native(self, *argv):
         result = subprocess.run(argv, cwd=self.root, env=self.env, capture_output=True, text=True, timeout=300)
@@ -126,6 +136,9 @@ class NativeExtindexTests(unittest.TestCase):
                                          (line.split() for line in out.splitlines())}
         return self.expected_cache[name]
 
+    def checkpoint(self, name):
+        return query(self.over(), "SELECT key,val FROM eidx_meta WHERE key LIKE ?", f"lc-v2:org.test.{name}//%")
+
     def assert_consistent(self, names):
         """Each inbox message is indexed once; over, xref3 and Xapian agree.
 
@@ -147,6 +160,53 @@ class NativeExtindexTests(unittest.TestCase):
         self.assertEqual(len(xapian), len(set(xapian)))
         self.assertEqual(over, referenced)
         self.assertEqual(set(xapian), over)
+
+    def sliced(self, inbox, between=None, limit=60):
+        counts, checkpoints, first = [], [], None
+        for _ in range(limit):
+            result = run_command(self.argv(inbox), self.config, self.root / "logs" / "extindex.log",
+                                 env=self.env, slice_seconds=self.slice_seconds, graceful=True)
+            counts.append(len(self.indexed("big")))
+            checkpoints.append(self.checkpoint("big"))
+            if first is None:
+                first = self.indexed("big")
+            if not result.get("sliced"):
+                return counts, checkpoints, first
+            if between:
+                between()
+                between = None
+        self.fail(f"import did not finish in {limit} slices: {counts}")
+
+    def test_sliced_import_resumes_without_reindexing(self):
+        counts, checkpoints, first = self.sliced(self.big)
+        self.assertGreaterEqual(len(counts), 2, counts)
+        self.assertLess(counts[0], MESSAGES)
+        self.assertGreater(counts[0], 0)
+        # Progress never goes backwards; none starts again from zero. A slice
+        # shorter than native start-up on a loaded host may add nothing.
+        self.assertEqual(counts, sorted(counts))
+        self.assertGreater(len(set(counts)), 1)
+        self.assertEqual(counts[-1], MESSAGES)
+        self.assertTrue(checkpoints[0], "first slice left no last-commit checkpoint")
+        self.assertGreater(len({tuple(c) for c in checkpoints}), 1)
+        final = self.indexed("big")
+        self.assertEqual({key: final[key] for key in first}, first)
+        self.assert_consistent(["big"])
+        log = (self.root / "logs" / "extindex.log").read_text()
+        self.assertEqual(log.count("slice_end_requested"), len(counts) - 1)
+
+    def test_other_inbox_indexes_between_slices(self):
+        hot = self.inbox("hot", 20)
+        self.native(*self.argv(hot))
+        def refresh():
+            before = len(self.indexed("big"))
+            self.add("hot", 5, start=20)
+            self.native(*self.argv(hot))
+            self.assertEqual(len(self.indexed("hot")), 25)
+            self.assertEqual(len(self.indexed("big")), before)
+        counts, _, _ = self.sliced(self.big, between=refresh)
+        self.assertGreaterEqual(len(counts), 2, counts)
+        self.assert_consistent(["big", "hot"])
 
     def xapian_documents(self):
         total = 0
@@ -178,9 +238,24 @@ class NativeExtindexTests(unittest.TestCase):
         # SQLite commits before Xapian: the cut may leave Xapian behind.
         self.assertLessEqual(self.xapian_documents(), query(self.over(), "SELECT COUNT(*) FROM over")[0][0])
         self.assertGreaterEqual(requeue_after_unclean_exit(self.config, floor), cut)
-        run_command(self.argv(self.big), self.config, self.root / "logs" / "extindex.log", env=self.env, graceful=True)
+        counts, _, _ = self.sliced(self.big)
+        self.assertGreaterEqual(counts[0], cut)
         self.assert_consistent(["big"])
         self.assertEqual(query(self.over(), "SELECT COUNT(*) FROM eidxq")[0][0], 0)
+
+    def test_power_cut_after_clean_slice_requeues_only_new_work(self):
+        result = run_command(self.argv(self.big), self.config, self.root / "logs" / "extindex.log",
+                             env=self.env, slice_seconds=self.slice_seconds, graceful=True)
+        self.assertTrue(result.get("sliced"))
+        floor = extindex_floor(self.config)
+        self.assertGreater(floor["over_num"], 0)
+        self.assertEqual(self.xapian_documents(), query(self.over(), "SELECT COUNT(*) FROM over WHERE num>0")[0][0])
+        self.power_cut(self.big, floor["over_num"] + 200)
+        requeued = requeue_after_unclean_exit(self.config, floor)
+        self.assertGreater(requeued, 0)
+        self.assertLessEqual(requeued, len(self.indexed("big")) - floor["over_num"])
+        self.sliced(self.big)
+        self.assert_consistent(["big"])
 
 if __name__ == "__main__":
     unittest.main()

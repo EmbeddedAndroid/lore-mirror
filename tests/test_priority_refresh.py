@@ -103,7 +103,8 @@ class PriorityRefreshTests(RefreshHarness):
         self.rows['other'] = self.indexed_row('other', status='error', last_error='old fetch failure')
         self.rows['dirty'] = self.indexed_row('dirty', index_dirty=True)
         state = self.full_pass()
-        self.assertEqual(self.clones(), ['slow', 'hot', 'other', 'cold', 'dirty', 'tail'])
+        # The interrupted inbox resumes first; once clean it is refreshed too.
+        self.assertEqual(self.clones(), ['dirty', 'slow', 'hot', 'other', 'dirty', 'cold', 'tail'])
         self.assertEqual(self.checks, [0, 300])
         self.assertEqual(state['lists']['other']['indexed_fingerprints'], {'/other/git/0.git': 'b' * 40})
         self.assertFalse(state['unsafe_index'])
@@ -126,9 +127,12 @@ class PriorityRefreshTests(RefreshHarness):
         atomic_json(self.root / 'sync-state.json', state)
         self.now += 300
         self.durations.clear()
-        self.full_pass()
-        self.assertEqual(self.checks, [300, 300])
-        self.assertEqual(self.clones(), ['hot', 'slow', 'cold', 'tail'])
+        result = self.full_pass()
+        # A due checkpoint at the start of the pass reuses its manifest.
+        self.assertEqual(self.checks, [300])
+        self.assertEqual(self.clones(), ['slow', 'cold', 'tail'])
+        self.assertEqual(result['last_priority_refresh_at'], self.timestamp())
+        self.assertEqual(result['last_priority_refresh_status'], 'ready')
 
     def test_no_refresh_before_interval(self):
         self.durations['slow'] = 299
