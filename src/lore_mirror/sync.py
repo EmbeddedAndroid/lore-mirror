@@ -32,6 +32,8 @@ PACK_RE = re.compile(rb"^P (pack-[a-f0-9]{40,64}\.pack)$", re.M)
 MAX_MANIFEST_COMPRESSED = 4 * 1024 * 1024
 MAX_MANIFEST_PLAIN = 32 * 1024 * 1024
 LOG_MAX_BYTES = 10 * 1024 * 1024
+# Leaves the coordinator 60 s of the sync service's 600 s Compose stop grace.
+MAX_STOP_GRACE = 540
 
 
 class SyncError(RuntimeError):
@@ -282,7 +284,7 @@ def run_command(argv, config, log_path, *, env=None, slice_seconds=None, gracefu
     timeout = config.get("job_timeout_seconds", 12 * 3600)
     memory_limit = config.get("job_memory_limit_bytes", 6 * GIB)
     slice_grace = config.get("index_slice_grace_seconds", 900)
-    stop_grace = config.get("index_stop_grace_seconds", 30) if graceful else 15
+    stop_grace = config.get("index_stop_grace_seconds", 300) if graceful else 15
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # Rotate between jobs so the child keeps a stable output descriptor.
@@ -300,13 +302,19 @@ def run_command(argv, config, log_path, *, env=None, slice_seconds=None, gracefu
         child = subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
             env=env, start_new_session=True)
 
+        stop_by = []
+
         def stop(wait):
+            # A daemon stop that interrupts an error stop shares its deadline,
+            # so the coordinator exits within one grace of Compose's SIGTERM.
+            if not stop_by:
+                stop_by.append(time.monotonic() + wait)
             try:
                 if graceful:
                     os.kill(child.pid, signal.SIGTERM)
                 else:
                     os.killpg(child.pid, signal.SIGTERM)
-                child.wait(timeout=wait)
+                child.wait(timeout=max(0, stop_by[0] - time.monotonic()))
             except subprocess.TimeoutExpired:
                 os.killpg(child.pid, signal.SIGKILL)
                 child.wait()
@@ -470,11 +478,11 @@ def prepare_config(path):
     config.setdefault("index_batch_size", "16m")
     config.setdefault("index_slice_seconds", 3600)
     config.setdefault("index_slice_grace_seconds", 900)
-    config.setdefault("index_stop_grace_seconds", 30)
+    config.setdefault("index_stop_grace_seconds", 300)
     if not 60 <= config["index_slice_seconds"] <= config.get("job_timeout_seconds", 12 * 3600):
         raise SyncError("index_slice_seconds must be between 60 and job_timeout_seconds")
-    if not 1 <= config["index_slice_grace_seconds"] <= 3600 or not 1 <= config["index_stop_grace_seconds"] <= 40:
-        raise SyncError("index grace periods must be 1 to 3600 (slice) and 1 to 40 (stop) seconds")
+    if not 1 <= config["index_slice_grace_seconds"] <= 3600 or not 1 <= config["index_stop_grace_seconds"] <= MAX_STOP_GRACE:
+        raise SyncError(f"index grace periods must be 1 to 3600 (slice) and 1 to {MAX_STOP_GRACE} (stop) seconds")
     if not re.fullmatch(r"[1-9][0-9]*[kmg]?", str(config["index_batch_size"])):
         raise SyncError("invalid index_batch_size")
     unknown = set(config["priority_lists"]) - set(ids)

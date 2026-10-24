@@ -1,6 +1,7 @@
 """Unclean extindex exits: graceful stops and the Xapian repair queue."""
 import contextlib
 from pathlib import Path
+import signal
 import sqlite3
 import sys
 import tempfile
@@ -27,6 +28,7 @@ while True:
 LEADER = """
 import signal, subprocess, sys, time
 out, mode = sys.argv[1], sys.argv[2]
+flush = float(sys.argv[3]) if len(sys.argv) > 3 else .3
 helper = subprocess.Popen([sys.executable, "-c", HELPER, out])
 quit = []
 if mode == "ignore":
@@ -36,7 +38,7 @@ else:
 open(out + "/leader-ready", "w").close()
 while not quit:
     time.sleep(.05)
-time.sleep(.3)
+time.sleep(flush)
 with open(out + "/checkpoint", "w") as f:
     f.write("alive" if helper.poll() is None else "dead")
 helper.kill()
@@ -52,8 +54,8 @@ class GracefulStopTests(unittest.TestCase):
         self.config = {'data_dir': str(self.root), 'min_free_fraction': 0,
             'job_timeout_seconds': 60, 'index_slice_grace_seconds': 5, 'index_stop_grace_seconds': 5}
 
-    def run_leader(self, mode='quit', **kwargs):
-        argv = [sys.executable, '-c', LEADER, str(self.root), mode]
+    def run_leader(self, mode='quit', flush=.3, **kwargs):
+        argv = [sys.executable, '-c', LEADER, str(self.root), mode, str(flush)]
         return run_command(argv, self.config, self.root / 'logs' / 'job.log', **kwargs)
 
     def test_daemon_stop_asks_leader_to_checkpoint(self):
@@ -77,6 +79,38 @@ class GracefulStopTests(unittest.TestCase):
         with mock.patch('lore_mirror.sync._aggregate_rss', side_effect=sample), \
                 self.assertRaises(KeyboardInterrupt) as raised:
             self.run_leader("ignore", graceful=True)
+        self.assertFalse(raised.exception.lore_clean_stop)
+        self.assertFalse((self.root / 'checkpoint').exists())
+
+    def test_default_grace_lets_a_slow_leader_quit_cleanly(self):
+        # Measured quits on .63 took 76 s and 275 s; 45 s exceeds the old 40 s cap.
+        del self.config['index_stop_grace_seconds']
+        def sample(pid):
+            if (self.root / 'helper-ready').exists() and (self.root / 'leader-ready').exists():
+                raise KeyboardInterrupt
+            return 0
+        started = time.monotonic()
+        with mock.patch('lore_mirror.sync._aggregate_rss', side_effect=sample), \
+                self.assertRaises(KeyboardInterrupt) as raised:
+            self.run_leader(flush=45, graceful=True)
+        self.assertGreaterEqual(time.monotonic() - started, 45)
+        self.assertTrue(raised.exception.lore_clean_stop)
+        self.assertEqual((self.root / 'checkpoint').read_text(), 'alive')
+        self.assertFalse((self.root / 'helper-term').exists())
+
+    def test_daemon_stop_during_error_stop_shares_its_deadline(self):
+        self.config.update(job_timeout_seconds=1, index_stop_grace_seconds=4)
+        def interrupt(*_):
+            raise KeyboardInterrupt
+        previous = signal.signal(signal.SIGALRM, interrupt)
+        self.addCleanup(signal.signal, signal.SIGALRM, previous)
+        signal.alarm(4)
+        self.addCleanup(signal.alarm, 0)
+        started = time.monotonic()
+        with self.assertRaises(KeyboardInterrupt) as raised:
+            self.run_leader('ignore', graceful=True)
+        # Error stop starts near 1 s with a 4 s grace; a fresh wait would end near 8 s.
+        self.assertLess(time.monotonic() - started, 6.5)
         self.assertFalse(raised.exception.lore_clean_stop)
         self.assertFalse((self.root / 'checkpoint').exists())
 

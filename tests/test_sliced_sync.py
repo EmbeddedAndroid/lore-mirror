@@ -2,12 +2,13 @@
 import fcntl
 import json
 from pathlib import Path
+import re
 import sys
 import tempfile
 import time
 import unittest
 
-from lore_mirror.sync import SyncError, prepare_config, run_command
+from lore_mirror.sync import MAX_STOP_GRACE, SyncError, prepare_config, run_command
 from tests import test_extindex_repair as repair
 from tests import test_priority_refresh as fixtures
 
@@ -53,13 +54,29 @@ class SliceConfigTests(unittest.TestCase):
             path.write_text(json.dumps(base))
             config = prepare_config(path)
             self.assertEqual((config['index_slice_seconds'], config['index_slice_grace_seconds'],
-                config['index_stop_grace_seconds']), (3600, 900, 30))
+                config['index_stop_grace_seconds']), (3600, 900, 300))
+            for good in (41, 300, 540):
+                with self.subTest(good=good):
+                    path.write_text(json.dumps(base | {'index_stop_grace_seconds': good}))
+                    self.assertEqual(prepare_config(path)['index_stop_grace_seconds'], good)
             for bad in ({'index_slice_seconds': 59}, {'index_slice_seconds': 7200, 'job_timeout_seconds': 3600},
-                    {'index_slice_grace_seconds': 0}, {'index_stop_grace_seconds': 41}):
+                    {'index_slice_grace_seconds': 0}, {'index_stop_grace_seconds': 0},
+                    {'index_stop_grace_seconds': 541}):
                 with self.subTest(bad=bad):
                     path.write_text(json.dumps(base | bad))
                     with self.assertRaises(SyncError):
                         prepare_config(path)
+
+    def test_sync_compose_grace_outlasts_the_stop_cap(self):
+        root = Path(__file__).resolve().parents[1]
+        sync = re.search(r"^  sync:\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)", (root / 'compose.yaml').read_text(), re.M | re.S)
+        grace = re.search(r"^    stop_grace_period: (\d+)s$", sync.group(1), re.M)
+        self.assertGreaterEqual(int(grace.group(1)), MAX_STOP_GRACE + 60)
+        for overlay in root.glob('compose.*.yaml'):
+            with self.subTest(overlay=overlay.name):
+                body = re.search(r"^  sync:\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)", overlay.read_text(), re.M | re.S)
+                if body:
+                    self.assertNotIn('stop_grace_period', body.group(1))
 
 
 class SliceSchedulingTests(fixtures.RefreshHarness):

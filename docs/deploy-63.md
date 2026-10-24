@@ -133,10 +133,11 @@ unclean exit.
 A sliced import completes no run until its last slice, so after an unclean
 exit the first completed run is usually a priority refresh between slices: it
 reindexes the whole repair queue (up to a slice's worth of documents) without
-slicing, which can delay that refresh by up to about a slice. If the daemon is
-stopped while a slice is already flushing, or while an error is stopping a
-job, the two waits can exceed the Compose grace; Docker then kills the job and
-the next run repairs it as an unclean exit.
+slicing, which can delay that refresh by up to about a slice. A daemon stop
+that arrives while an error is stopping a job shares that stop's deadline; one
+that arrives while a slice is flushing re-signals the leader and waits one
+`index_stop_grace_seconds` from the daemon stop. Either way the coordinator
+exits within one grace of Compose's SIGTERM.
 
 ### Unclean extindex exits
 
@@ -144,8 +145,13 @@ Stopping the daemon (for example `docker compose up -d` recreating sync) sends
 SIGTERM to the native index leader only: public-inbox shard workers ignore it,
 and the leader's git helpers must stay alive until it has flushed, so the
 process group is not signalled. The coordinator waits
-`index_stop_grace_seconds` (30, below the 45 s Compose stop grace) before
-killing the group. A leader that exits cleanly in time needs no repair.
+`index_stop_grace_seconds` (default 300, at most 540) before killing the
+group. A graceful quit on this host takes about 1 to 5 minutes (76 s and
+275 s measured at two cutovers), so the sync service's Compose
+`stop_grace_period` is 600 s, which leaves the coordinator time to write its
+state after the wait; the other services keep 45 s. A leader that exits
+cleanly in time needs no repair. A recreate of sync therefore takes up to
+the full leader quit time.
 
 public-inbox commits SQLite, including its last-commit checkpoint, before the
 Xapian shards. A writer killed between the two (power cut, OOM, an overrun
