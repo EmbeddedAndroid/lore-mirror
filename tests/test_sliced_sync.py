@@ -54,14 +54,14 @@ class SliceConfigTests(unittest.TestCase):
             path.write_text(json.dumps(base))
             config = prepare_config(path)
             self.assertEqual((config['index_slice_seconds'], config['index_slice_grace_seconds'],
-                config['index_stop_grace_seconds']), (3600, 900, 300))
-            for good in (41, 300, 540):
+                config['index_stop_grace_seconds']), (3600, 900, 900))
+            for good in (41, 300, 541, 900):
                 with self.subTest(good=good):
                     path.write_text(json.dumps(base | {'index_stop_grace_seconds': good}))
                     self.assertEqual(prepare_config(path)['index_stop_grace_seconds'], good)
             for bad in ({'index_slice_seconds': 59}, {'index_slice_seconds': 7200, 'job_timeout_seconds': 3600},
                     {'index_slice_grace_seconds': 0}, {'index_stop_grace_seconds': 0},
-                    {'index_stop_grace_seconds': 541}):
+                    {'index_stop_grace_seconds': 901}):
                 with self.subTest(bad=bad):
                     path.write_text(json.dumps(base | bad))
                     with self.assertRaises(SyncError):

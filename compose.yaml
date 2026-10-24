@@ -53,7 +53,7 @@ services:
     <<: *image
     command: [sync, --config, /config/pilot.json, --daemon]
     # A graceful extindex quit takes minutes; must exceed index_stop_grace_seconds.
-    stop_grace_period: 600s
+    stop_grace_period: 960s
     volumes:
       - type: bind
         source: ${LORE_CONFIG:-./config/container.json}

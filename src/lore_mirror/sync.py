@@ -32,8 +32,8 @@ PACK_RE = re.compile(rb"^P (pack-[a-f0-9]{40,64}\.pack)$", re.M)
 MAX_MANIFEST_COMPRESSED = 4 * 1024 * 1024
 MAX_MANIFEST_PLAIN = 32 * 1024 * 1024
 LOG_MAX_BYTES = 10 * 1024 * 1024
-# Leaves the coordinator 60 s of the sync service's 600 s Compose stop grace.
-MAX_STOP_GRACE = 540
+# Leaves the coordinator 60 s of the sync service's 960 s Compose stop grace.
+MAX_STOP_GRACE = 900
 
 
 class SyncError(RuntimeError):
@@ -284,7 +284,7 @@ def run_command(argv, config, log_path, *, env=None, slice_seconds=None, gracefu
     timeout = config.get("job_timeout_seconds", 12 * 3600)
     memory_limit = config.get("job_memory_limit_bytes", 6 * GIB)
     slice_grace = config.get("index_slice_grace_seconds", 900)
-    stop_grace = config.get("index_stop_grace_seconds", 300) if graceful else 15
+    stop_grace = config.get("index_stop_grace_seconds", 900) if graceful else 15
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # Rotate between jobs so the child keeps a stable output descriptor.
@@ -297,18 +297,25 @@ def run_command(argv, config, log_path, *, env=None, slice_seconds=None, gracefu
     error = None
     sliced_at = None
     with log_path.open("ab") as log:
-        log.write((json.dumps({"at": utcnow(), "argv": argv}) + "\n").encode())
-        log.flush()
+        def note(**event):
+            # The coordinator's own signals are invisible to Docker events.
+            log.write((json.dumps({"at": utcnow(), **event}) + "\n").encode())
+            log.flush()
+
+        note(argv=argv)
         child = subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
             env=env, start_new_session=True)
 
         stop_by = []
+        quit_at = []
 
-        def stop(wait):
+        def stop(wait, reason):
             # A daemon stop that interrupts an error stop shares its deadline,
             # so the coordinator exits within one grace of Compose's SIGTERM.
             if not stop_by:
                 stop_by.append(time.monotonic() + wait)
+                quit_at.append(time.monotonic())
+                note(stop_requested=reason, grace_seconds=wait)
             try:
                 if graceful:
                     os.kill(child.pid, signal.SIGTERM)
@@ -316,6 +323,7 @@ def run_command(argv, config, log_path, *, env=None, slice_seconds=None, gracefu
                     os.killpg(child.pid, signal.SIGTERM)
                 child.wait(timeout=max(0, stop_by[0] - time.monotonic()))
             except subprocess.TimeoutExpired:
+                note(stop_grace_expired=True, killed="SIGKILL")
                 os.killpg(child.pid, signal.SIGKILL)
                 child.wait()
             except ProcessLookupError:
@@ -333,25 +341,30 @@ def run_command(argv, config, log_path, *, env=None, slice_seconds=None, gracefu
                     error = "job aggregate RSS limit exceeded"
                 elif sliced_at is not None and now - sliced_at > slice_grace:
                     error = "slice did not stop within index_slice_grace_seconds"
+                    note(slice_grace_expired=True, killed="SIGKILL")
                     os.killpg(child.pid, signal.SIGKILL)
                     child.wait()
                     break
                 elif slice_seconds and sliced_at is None and now - started >= slice_seconds:
                     sliced_at = now
-                    log.write((json.dumps({"at": utcnow(), "slice_end_requested": True}) + "\n").encode())
-                    log.flush()
+                    quit_at.append(now)
+                    note(slice_end_requested=True)
                     os.kill(child.pid, signal.SIGTERM)
                 if error:
-                    stop(stop_grace)
+                    stop(stop_grace, error)
                     break
                 time.sleep(.25)
             rc = child.wait()
         except BaseException as exc:
             if child.poll() is None:
-                stop(stop_grace)
+                stop(stop_grace, "coordinator stop")
             # A graceful writer that exited 0 wrote its own checkpoint.
             exc.lore_clean_stop = graceful and child.returncode == 0
+            if quit_at:
+                note(exited=child.returncode, quit_seconds=round(time.monotonic() - quit_at[0], 1))
             raise
+        if quit_at:
+            note(exited=rc, quit_seconds=round(time.monotonic() - quit_at[0], 1))
     result = {"seconds": round(time.monotonic() - started, 3),
         "peak_aggregate_rss_bytes_sampled": peak, "returncode": rc, "log": str(log_path)}
     if error or rc:
@@ -478,7 +491,7 @@ def prepare_config(path):
     config.setdefault("index_batch_size", "16m")
     config.setdefault("index_slice_seconds", 3600)
     config.setdefault("index_slice_grace_seconds", 900)
-    config.setdefault("index_stop_grace_seconds", 300)
+    config.setdefault("index_stop_grace_seconds", 900)
     if not 60 <= config["index_slice_seconds"] <= config.get("job_timeout_seconds", 12 * 3600):
         raise SyncError("index_slice_seconds must be between 60 and job_timeout_seconds")
     if not 1 <= config["index_slice_grace_seconds"] <= 3600 or not 1 <= config["index_stop_grace_seconds"] <= MAX_STOP_GRACE:

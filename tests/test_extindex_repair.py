@@ -1,15 +1,19 @@
 """Unclean extindex exits: graceful stops and the Xapian repair queue."""
 import contextlib
+import json
+import multiprocessing
+import os
 from pathlib import Path
 import signal
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
 
-from lore_mirror.sync import SyncError, extindex_floor, requeue_after_unclean_exit, run_command
+from lore_mirror.sync import SyncError, extindex_floor, requeue_after_unclean_exit, run_command, run_sync
 from tests import test_priority_refresh as fixtures
 
 # The leader models public-inbox: SIGTERM sets a quit flag, the leader then
@@ -83,7 +87,7 @@ class GracefulStopTests(unittest.TestCase):
         self.assertFalse((self.root / 'checkpoint').exists())
 
     def test_default_grace_lets_a_slow_leader_quit_cleanly(self):
-        # Measured quits on .63 took 76 s and 275 s; 45 s exceeds the old 40 s cap.
+        # Measured quits on .63 took 45 s to about 595 s; 45 s exceeds the old 40 s cap.
         del self.config['index_stop_grace_seconds']
         def sample(pid):
             if (self.root / 'helper-ready').exists() and (self.root / 'leader-ready').exists():
@@ -222,6 +226,126 @@ class RepairSchedulingTests(fixtures.RefreshHarness):
         state = self.full_pass()
         self.assertFalse(state['extindex_running'])
         self.assertTrue(state['lists']['big']['index_dirty'])
+
+
+REAL_SIGNAL, REAL_SLEEP, REAL_RUN_COMMAND = signal.signal, time.sleep, run_command
+
+
+class CoordinatorRestartTests(fixtures.RefreshHarness):
+    """A real SIGTERM to the coordinator while a native extindex leader runs."""
+
+    def setUp(self):
+        super().setUp()
+        self.names = ['hot', 'big', 'tail']
+        self.priority = []
+        self.leader_mode = None
+        self.stop_grace = 5
+        # The coordinator's own handler, real child processes and job polling;
+        # only the daemon's sleep between cycles ends the pass.
+        self.enterContext(mock.patch('lore_mirror.sync.signal.signal', side_effect=REAL_SIGNAL))
+        self.addCleanup(REAL_SIGNAL, signal.SIGTERM, signal.getsignal(signal.SIGTERM))
+        self.enterContext(mock.patch('lore_mirror.sync.time.sleep', side_effect=self.sleep))
+
+    def sleep(self, seconds):
+        if seconds > 1:
+            raise KeyboardInterrupt
+        REAL_SLEEP(seconds)
+
+    def command(self, argv, config, log, **kwargs):
+        if self.leader_mode and argv[0] == 'public-inbox-extindex' and Path(log).stem == 'extindex-big':
+            config = dict(config, index_stop_grace_seconds=self.stop_grace)
+            leader = [sys.executable, '-c', LEADER, str(self.root), self.leader_mode]
+            threading.Thread(target=self.terminate_when_ready, daemon=True).start()
+            return REAL_RUN_COMMAND(leader, config, log, **kwargs)
+        return super().command(argv, config, log, **kwargs)
+
+    def terminate_when_ready(self):
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if (self.root / 'leader-ready').exists() and (self.root / 'helper-ready').exists():
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
+            REAL_SLEEP(.05)
+
+    def stopped_pass(self):
+        with self.assertRaises(SystemExit) as raised:
+            run_sync(self.config(), once=False)
+        self.assertEqual(raised.exception.code, 128 + signal.SIGTERM)
+        return json.loads((self.root / 'sync-state.json').read_text())
+
+    def restart(self):
+        self.leader_mode = None
+        requeued = []
+        with mock.patch('lore_mirror.sync.requeue_after_unclean_exit',
+                side_effect=lambda config, floor: requeued.append(floor) or 3):
+            state = self.full_pass()
+        return state, requeued
+
+    def job_log(self):
+        return [json.loads(line) for line in (self.root / 'logs' / 'extindex-big.log').read_text().splitlines()
+            if line.startswith('{')]
+
+    def kill_orphans(self):
+        # The killed coordinator leaves its leader and helper behind.
+        for entry in Path('/proc').iterdir():
+            try:
+                if entry.name.isdigit() and str(self.root).encode() in (entry / 'cmdline').read_bytes():
+                    os.kill(int(entry.name), signal.SIGKILL)
+            except OSError:
+                pass
+
+    def test_graceful_stop_mid_extindex_clears_flag_and_restart_skips_repair(self):
+        self.leader_mode = 'quit'
+        stopped = self.stopped_pass()
+        self.assertEqual((self.root / 'checkpoint').read_text(), 'alive')
+        self.assertFalse(stopped['extindex_running'])
+        self.assertTrue(stopped['lists']['big']['index_dirty'])
+        events = self.job_log()
+        self.assertEqual(events[1]['stop_requested'], 'coordinator stop')
+        self.assertEqual(events[-1]['exited'], 0)
+        self.assertFalse(any('killed' in e for e in events))
+        state, requeued = self.restart()
+        self.assertEqual(requeued, [])
+        self.assertNotIn('extindex_recovery', state)
+        self.assertFalse(state['extindex_running'])
+        self.assertFalse(state['lists']['big']['index_dirty'])
+
+    def test_stop_grace_overrun_keeps_flag_and_restart_repairs(self):
+        self.leader_mode, self.stop_grace = 'ignore', 1
+        stopped = self.stopped_pass()
+        self.assertFalse((self.root / 'checkpoint').exists())
+        self.assertTrue(stopped['extindex_running'])
+        events = self.job_log()
+        self.assertTrue(any(e.get('stop_grace_expired') and e.get('killed') == 'SIGKILL' for e in events))
+        self.assertEqual(events[-1]['exited'], -signal.SIGKILL)
+        state, requeued = self.restart()
+        self.assertEqual(requeued, [stopped['extindex_floor']])
+        self.assertEqual(state['extindex_recovery']['requeued_documents'], 3)
+        self.assertFalse(state['extindex_running'])
+
+    def test_killed_coordinator_restart_repairs(self):
+        # kill -9: no handler, no finally, no state write after the job starts.
+        def coordinator():
+            self.leader_mode = 'quit'
+            self.terminate_when_ready = lambda: None
+            try:
+                run_sync(self.config(), once=False)
+            finally:
+                os._exit(1)
+        child = multiprocessing.get_context('fork').Process(target=coordinator)
+        child.start()
+        self.addCleanup(self.kill_orphans)
+        deadline = time.monotonic() + 20
+        while not (self.root / 'leader-ready').exists() and time.monotonic() < deadline:
+            REAL_SLEEP(.05)
+        os.kill(child.pid, signal.SIGKILL)
+        child.join()
+        self.assertEqual(child.exitcode, -signal.SIGKILL)
+        killed = json.loads((self.root / 'sync-state.json').read_text())
+        self.assertTrue(killed['extindex_running'])
+        state, requeued = self.restart()
+        self.assertEqual(requeued, [killed['extindex_floor']])
+        self.assertEqual(state['extindex_recovery']['requeued_documents'], 3)
 
 
 if __name__ == '__main__':

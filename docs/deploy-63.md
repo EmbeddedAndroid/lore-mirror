@@ -145,13 +145,24 @@ Stopping the daemon (for example `docker compose up -d` recreating sync) sends
 SIGTERM to the native index leader only: public-inbox shard workers ignore it,
 and the leader's git helpers must stay alive until it has flushed, so the
 process group is not signalled. The coordinator waits
-`index_stop_grace_seconds` (default 300, at most 540) before killing the
-group. A graceful quit on this host takes about 1 to 5 minutes (76 s and
-275 s measured at two cutovers), so the sync service's Compose
-`stop_grace_period` is 600 s, which leaves the coordinator time to write its
-state after the wait; the other services keep 45 s. A leader that exits
-cleanly in time needs no repair. A recreate of sync therefore takes up to
-the full leader quit time.
+`index_stop_grace_seconds` (default 900, at most 900) before killing the
+group. The leader quits only after the message or Xapian commit in flight,
+so a graceful quit on this host takes from under a minute to about 10
+minutes (slice quits measured 45 s to about 595 s); the default matches
+`index_slice_grace_seconds`, which bounds the same quit at a slice end. The
+sync service's Compose `stop_grace_period` is 960 s, which leaves the
+coordinator time to write its state after the wait; the other services keep
+45 s. A leader that exits cleanly in time needs no repair. A recreate of
+sync therefore takes up to the full leader quit time.
+
+Docker events show only the SIGTERM Docker sends to the coordinator, never
+the coordinator's own signals, so the job log (for example
+`logs/extindex-LIST.log`) records them: `stop_requested` with the grace,
+`stop_grace_expired` and `killed` when the wait ran out, `slice_grace_expired`
+for an overrun slice, and `exited` with the leader's exit status and
+`quit_seconds` after any quit request. A killed leader leaves
+`extindex_running` set in sync-state.json, and the next extindex job repairs
+as below.
 
 public-inbox commits SQLite, including its last-commit checkpoint, before the
 Xapian shards. A writer killed between the two (power cut, OOM, an overrun
